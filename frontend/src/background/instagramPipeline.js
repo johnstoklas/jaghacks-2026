@@ -1,24 +1,17 @@
-const IG_BASE_URL = window.location.origin + '/';
+const IG_BASE_URL = 'https://www.instagram.com/';
 const IG_SHORTCODE_ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_';
 
 const processedShortcodes = new Set();
 
-function getCookieValue(name) {
-  return document.cookie
-    .split('; ')
-    .find((row) => row.startsWith(`${name}=`))
-    ?.split('=')[1];
-}
-
-function getFetchOptions() {
+function getFetchOptions(authContext = {}) {
   return {
     headers: {
-      'x-csrftoken': getCookieValue('csrftoken'),
+      'x-csrftoken': authContext.csrfToken || '',
       'x-ig-app-id': '936619743392459',
-      'x-ig-www-claim': sessionStorage.getItem('www-claim-v2') || '',
+      'x-ig-www-claim': authContext.igWwwClaim || '',
       'x-requested-with': 'XMLHttpRequest',
     },
-    referrer: window.location.href,
+    referrer: authContext.referrer || 'https://www.instagram.com/',
     referrerPolicy: 'strict-origin-when-cross-origin',
     method: 'GET',
     mode: 'cors',
@@ -53,16 +46,16 @@ async function getPostIdFromApi(shortcode) {
   return json?.data?.xdt_shortcode_media?.id || null;
 }
 
-async function getPostInfo(shortcode) {
+async function getPostInfo(shortcode, authContext) {
   const postId = convertToPostId(shortcode);
   let apiURL = new URL(`/api/v1/media/${postId}/info/`, IG_BASE_URL);
 
-  let response = await fetch(apiURL.href, getFetchOptions());
+  let response = await fetch(apiURL.href, getFetchOptions(authContext));
   if (response.status === 400) {
-    const realPostId = await getPostIdFromApi(shortcode);
+    const realPostId = await getPostIdFromApi(shortcode, authContext);
     if (!realPostId) return null;
     apiURL = new URL(`/api/v1/media/${realPostId}/info/`, IG_BASE_URL);
-    response = await fetch(apiURL.href, getFetchOptions());
+    response = await fetch(apiURL.href, getFetchOptions(authContext));
   }
 
   const json = await response.json();
@@ -110,7 +103,7 @@ async function uploadVideoAndGetAISummary(file) {
   return data.summary;
 }
 
-export async function processReelShortcode(shortcode) {
+export async function uploadToAPIAndSummarize(shortcode, authContext = {}) {
   if (!shortcode || processedShortcodes.has(shortcode)) {
     return null;
   }
@@ -118,7 +111,7 @@ export async function processReelShortcode(shortcode) {
   processedShortcodes.add(shortcode);
 
   try {
-    const postInfo = await getPostInfo(shortcode);
+    const postInfo = await getPostInfo(shortcode, authContext);
     if (!postInfo) return null;
 
     const media = extractMedia(postInfo);

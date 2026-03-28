@@ -1,5 +1,3 @@
-import { processReelShortcode } from '../background/instagramPipeline.js';
-
 function injectPageHook() {
   const script = document.createElement('script');
   script.src = chrome.runtime.getURL('pageHook.js');
@@ -13,32 +11,54 @@ function getShortcodeFromPath(pathname) {
   return match ? match[1] : null;
 }
 
-async function processShortcode(shortcode) {
-  if (!shortcode) return;
-  const result = await processReelShortcode(shortcode);
-  if (result) {
-    console.log('Reel processed:', result);
+function getCookieValue(name) {
+  return document.cookie
+    .split('; ')
+    .find((row) => row.startsWith(`${name}=`))
+    ?.split('=')[1];
+}
+
+function getAuthContext() {
+  return {
+    csrfToken: getCookieValue('csrftoken') || '',
+    igWwwClaim: sessionStorage.getItem('www-claim-v2') || '',
+    referrer: window.location.href,
+  };
+}
+
+async function sendReelBatchToBackground(reels) {
+  console.log('Sending reel batch to background:', reels);
+
+  try {
+    const response = await chrome.runtime.sendMessage({
+      type: 'REEL_BATCH_INTERCEPTED',
+      payload: {
+        reels: reels,
+        authContext: getAuthContext(),
+      },
+    });
+  } catch (error) {
+    console.error('Failed to send shortcodes to background', error);
   }
 }
 
 function setupListeners() {
   window.addEventListener('reelsBatchIntercepted', async (event) => {
-    const edges = event?.detail?.reels?.edges || [];
+    const reels = event?.detail?.reels?.edges || [];
 
-    console.log('Reels batch intercepted of length:', edges.length);
-    for (const edge of edges) {
-      const shortcode = edge?.node?.media?.code;
-      console.log('Processing shortcode:', shortcode);
-      processShortcode(shortcode);
-    }
+    console.log('Reels batch intercepted of length:', reels.length);
+    console.log('Sending reels to background:', reels);
+    sendReelBatchToBackground(reels);
   });
 
   window.addEventListener('popstate', () => {
-    processShortcode(getShortcodeFromPath(window.location.pathname));
+    const shortcode = getShortcodeFromPath(window.location.pathname);
+    sendReelBatchToBackground([shortcode]);
   });
 
   const observer = new MutationObserver(() => {
-    processShortcode(getShortcodeFromPath(window.location.pathname));
+    const shortcode = getShortcodeFromPath(window.location.pathname);
+    sendReelBatchToBackground([shortcode]);
   });
 
   observer.observe(document.documentElement, {
@@ -49,4 +69,4 @@ function setupListeners() {
 
 injectPageHook();
 setupListeners();
-processShortcode(getShortcodeFromPath(window.location.pathname));
+sendReelBatchToBackground([getShortcodeFromPath(window.location.pathname)]);
