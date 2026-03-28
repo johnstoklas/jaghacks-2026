@@ -1,8 +1,8 @@
-import { uploadToAPIAndSummarize } from './instagramPipeline.js';
+import { uploadToAPIAndSummarize } from './utils.js';
+import { handleLikePost, handleScrollReel, handleOpenComments } from './actions.js';
+import { handleCreateRun } from './runsServices.js';
 
-chrome.runtime.onInstalled.addListener(() => {
-	console.log('Extension installed');
-});
+console.log("background script loaded");
 
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     console.log("Received message of type:", message?.type);
@@ -46,11 +46,9 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 	return true;
 });
 
-import { handleLikePost, handleScrollReel, handleOpenComments } from './actions.js';
-
-console.log("background script loaded");
-
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (!message?.action) return false;
+  
   const { action, data } = message;
 
   chrome.tabs.query({ active: true, currentWindow: true }, async (tabs) => {
@@ -75,6 +73,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
         case "openComments":
           await handleOpenComments(tabId);
+          sendResponse({ success: true });
+          break;
+
+        case "createRun":
+          await handleCreateRun(data.items);
           sendResponse({ success: true });
           break;
 

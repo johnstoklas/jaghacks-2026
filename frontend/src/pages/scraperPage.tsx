@@ -44,9 +44,7 @@ export default function ScraperPage() {
 
   const markReel = (id: number, approved: boolean) => {
     setUpcomingReels((prev) =>
-      prev.map((reel) =>
-        reel.id === id ? { ...reel, approved } : reel
-      )
+      prev.map((reel) => (reel.id === id ? { ...reel, approved } : reel))
     );
   };
 
@@ -65,20 +63,26 @@ export default function ScraperPage() {
       <div>
         {/* Algorithm Progress */}
         <section className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-sm border border-pink-100 p-4">
-          <h2 className="text-sm font-semibold text-gray-700 mb-3">
+          <h2
+            className="
+              text-sm font-semibold mb-3
+              bg-gradient-to-r from-[#833AB4] via-[#FD1D1D] to-[#FCAF45]
+              bg-clip-text text-transparent
+            "
+          >
             Algorithm Progress
           </h2>
 
           <div className="space-y-3">
             {topics.map((topic) => (
               <div key={topic.label}>
-                <div className="flex justify-between text-sm mb-1">
+                <div className="flex justify-between text-sm mb-1 text-gray-700">
                   <span className="capitalize">{topic.label}</span>
                   <span className="font-medium">{topic.percent}%</span>
                 </div>
                 <div className="w-full h-2 rounded-full bg-pink-100 overflow-hidden">
                   <div
-                    className="h-full rounded-full bg-pink-500 transition-all duration-300"
+                    className="h-full rounded-full bg-gradient-to-r from-[#833AB4] via-[#FD1D1D] to-[#FCAF45] transition-all duration-300"
                     style={{ width: `${topic.percent}%` }}
                   />
                 </div>
@@ -88,12 +92,18 @@ export default function ScraperPage() {
         </section>
 
         {/* Current Reel */}
-        <section className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-sm border border-pink-100 p-4">
-          <h2 className="text-sm font-semibold text-gray-700 mb-3">
+        <section className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-sm border border-pink-100 p-4 mt-4">
+          <h2
+            className="
+              text-sm font-semibold mb-3
+              bg-gradient-to-r from-[#833AB4] via-[#FD1D1D] to-[#FCAF45]
+              bg-clip-text text-transparent
+            "
+          >
             Current Reel
           </h2>
 
-          <div className="rounded-xl bg-pink-50 border border-pink-100 p-3 mb-3">
+          <div className="rounded-xl bg-gradient-to-r from-pink-50 via-orange-50 to-purple-50 border border-pink-100 p-3 mb-3">
             <p className="text-sm font-medium text-gray-800">
               Currently processing:
             </p>
@@ -106,9 +116,9 @@ export default function ScraperPage() {
             {steps.map((step) => (
               <div
                 key={step.label}
-                className="flex items-center justify-between rounded-xl px-3 py-2 bg-gray-50"
+                className="flex items-center justify-between rounded-xl px-3 py-2 bg-gray-50 border border-pink-50"
               >
-                <span className="text-sm">{step.label}</span>
+                <span className="text-sm text-gray-700">{step.label}</span>
 
                 {step.status === "done" && (
                   <span className="flex items-center gap-1 text-green-600 text-sm font-medium">
@@ -134,26 +144,30 @@ export default function ScraperPage() {
 
         {/* Bottom controls */}
         <div className="absolute bottom-0 left-0 w-full p-3 bg-white/95 backdrop-blur-sm border-t border-pink-100">
-            <div className="flex gap-3">
-                
-                <button
-                onClick={() => setShowUpcomingModal(true)}
-                className="flex-1 py-3 rounded-2xl bg-white text-gray-800 font-semibold 
-                            border border-gray-200 shadow-sm hover:bg-gray-50 transition"
-                >
-                Upcoming
-                </button>
+          <div className="flex gap-3">
+            <button
+              onClick={() => setShowUpcomingModal(true)}
+              className="
+                flex-1 py-3 rounded-2xl bg-white font-semibold
+                border border-pink-200 text-pink-500
+                shadow-sm hover:bg-pink-50 transition
+              "
+            >
+              Upcoming
+            </button>
 
-                <button
-                onClick={handleStop}
-                className="flex-1 flex items-center justify-center gap-2 py-3 rounded-2xl 
-                            bg-red-500 text-white font-semibold shadow-md hover:bg-red-600 transition"
-                >
-                <Square size={16} fill="currentColor" />
-                Stop
-                </button>
-
-            </div>
+            <button
+              onClick={handleStop}
+              className="
+                flex-1 flex items-center justify-center gap-2 py-3 rounded-2xl
+                bg-gradient-to-r from-[#833AB4] via-[#FD1D1D] to-[#FCAF45]
+                text-white font-semibold shadow-md hover:opacity-90 transition
+              "
+            >
+              <Square size={16} fill="currentColor" />
+              Stop
+            </button>
+          </div>
         </div>
       </div>
 
@@ -162,12 +176,22 @@ export default function ScraperPage() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
           <div className="w-full max-w-sm rounded-3xl bg-white shadow-2xl border border-pink-100 p-4">
             <div className="flex items-center justify-between mb-4">
-              <h2 className="text-base font-semibold text-gray-800">
+              <h2
+                className="
+                  text-base font-semibold
+                  bg-gradient-to-r from-[#833AB4] via-[#FD1D1D] to-[#FCAF45]
+                  bg-clip-text text-transparent
+                "
+              >
                 Upcoming Reels
               </h2>
               <button
                 onClick={() => setShowUpcomingModal(false)}
-                className="text-sm px-3 py-1 rounded-full bg-gray-100 hover:bg-gray-200 transition"
+                className="
+                  text-sm px-3 py-1 rounded-full
+                  bg-pink-50 text-pink-600
+                  hover:bg-pink-100 transition
+                "
               >
                 Close
               </button>
@@ -177,7 +201,7 @@ export default function ScraperPage() {
               {upcomingReels.map((reel) => (
                 <div
                   key={reel.id}
-                  className="flex items-center justify-between gap-3 rounded-xl border border-gray-100 bg-gray-50 px-3 py-3"
+                  className="flex items-center justify-between gap-3 rounded-xl border border-pink-100 bg-gradient-to-r from-white to-pink-50 px-3 py-3"
                 >
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium text-gray-800 truncate">
@@ -198,7 +222,7 @@ export default function ScraperPage() {
                       className={`p-2 rounded-full border transition ${
                         reel.approved === false
                           ? "bg-red-100 border-red-200 text-red-600"
-                          : "bg-white border-gray-200 text-gray-500 hover:bg-gray-100"
+                          : "bg-white border-pink-100 text-gray-500 hover:bg-pink-50"
                       }`}
                     >
                       <X size={16} />
@@ -209,7 +233,7 @@ export default function ScraperPage() {
                       className={`p-2 rounded-full border transition ${
                         reel.approved === true
                           ? "bg-pink-100 border-pink-200 text-pink-600"
-                          : "bg-white border-gray-200 text-gray-500 hover:bg-gray-100"
+                          : "bg-white border-pink-100 text-gray-500 hover:bg-pink-50"
                       }`}
                     >
                       <Heart size={16} />
