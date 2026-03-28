@@ -51,22 +51,7 @@ function setupListeners() {
     sendReelBatchToBackground(reels);
   });
 
-  window.addEventListener('popstate', () => {
-    const shortcode = getShortcodeFromPath(window.location.pathname);
-    sendReelBatchToBackground([shortcode]);
-  });
-
-  const observer = new MutationObserver(() => {
-    const shortcode = getShortcodeFromPath(window.location.pathname);
-    sendReelBatchToBackground([shortcode]);
-  });
-
-  observer.observe(document.documentElement, {
-    childList: true,
-    subtree: true,
-  });
 }
 
 injectPageHook();
 setupListeners();
-sendReelBatchToBackground([getShortcodeFromPath(window.location.pathname)]);

@@ -13,6 +13,7 @@
   "permissions": ["storage", "activeTab", "scripting", "tabs"],
   "host_permissions": [
     "*://*.instagram.com/*",
+    "*://*.fbcdn.net/*",
     "http://localhost:8080/*"
   ],
   "content_scripts": [
