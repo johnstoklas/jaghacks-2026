@@ -32,6 +32,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           break;
 
         case "processReelBatch":
+            console.log("Processing reel batch:", data.reels);
             const ai_summaries = await processReelBatch(data.reels, data.authContext);
             sendResponse({ success: true, ai_summaries });
             break;

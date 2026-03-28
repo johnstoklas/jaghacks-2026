@@ -101,49 +101,74 @@ async function uploadVideoAndGetAISummary(file) {
   return data.summary;
 }
 
-async function uploadToAPIAndSummarize(shortcode, authContext = {}) {
-  let data = {};
-
+async function uploadToAPIAndSummarize(media, authContext = {}) {
   try {
-    const postInfo = await getPostInfo(shortcode, authContext);
-    if (!postInfo) return null;
+    if (!media) return null;
 
-    data = {
-      shortcode: shortcode,
-      video_duration: postInfo.video_duration || null,
-      caption: postInfo.caption?.text || null,
-      thumbnail_url: postInfo.image_versions2?.candidates?.[0]?.url || null
-    }
+    const mediaItems = extractMedia(media); 
 
-    const media = extractMedia(postInfo); 
-
-    for (const item of media) {
+    for (const item of mediaItems) {
       if (!item.isVideo) continue;
 
       const mediaResponse = await fetch(item.url);
       const blob = await mediaResponse.blob();
       const file = new File([blob], `video_${item.id}.mp4`, { type: 'video/mp4' });
-      data.ai_summary = await uploadVideoAndGetAISummary(file);
-      break;
+      return await uploadVideoAndGetAISummary(file);
     }
 
-    return data;
   } catch (error) {
-    console.error('Failed getting AI summary for reel with shortcode', shortcode, error);
+    console.error('Failed getting AI summary for reel', error);
     return null;
   }
 }
 
+async function sendMessageToActiveTab(payload) {
+  const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+  const tabId = tabs[0]?.id;
+  if (!tabId) return;
+
+  try {
+    await chrome.tabs.sendMessage(tabId, payload);
+  } catch (error) {
+    // Content script may not be ready on the current tab yet.
+    console.debug('Unable to send message to content script:', error);
+  }
+}
+
+async function processReel(reel, authContext){
+  const reelMedia = reel?.node?.media;
+  const shortcode = reelMedia?.code;
+  const reelData = {
+    shortcode: shortcode,
+    video_duration: reelMedia.video_duration || null,
+    caption: reelMedia.caption?.text || null,
+    thumbnail_url: reelMedia.image_versions2?.candidates?.[0]?.url || null
+  }
+
+  await sendMessageToActiveTab({
+    action: "reelData",
+    data: {
+      reelData,
+      authContext: authContext,
+    },
+  });
+
+  const ai_summary = await uploadToAPIAndSummarize(reelMedia, authContext);  
+
+  await sendMessageToActiveTab({
+    action: "reelShouldWatch",
+    data: {
+      ai_summary: ai_summary,
+      shouldWatch: true,
+      authContext: authContext,
+    },
+  });
+
+  console.log("Finished processing reel:", reel);
+}
+
 export async function processReelBatch(reels, authContext) {
-    const ai_summaries = {};
-    for (const reel of reels) {
-        const shortcode = reel?.node?.media?.code;
-        const result = await uploadToAPIAndSummarize(shortcode, authContext);
-        if (result) {
-            console.log("AI summary for shortcode", shortcode, ":", result);
-            ai_summaries[shortcode] = result;
-        }
-    }
-    console.log("AI summaries for reel batch:", ai_summaries);
-    return ai_summaries;
+  for (const reel of reels) {
+    processReel(reel, authContext);
+  }
 }

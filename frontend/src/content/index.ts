@@ -77,6 +77,15 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     sendResponse({ success, action: "openComments" });
   }
 
+  if (message.action === "reelData") {
+    console.log("Received reel data from background:", message.data);
+  }
+
+  if (message.action === "reelShouldWatch") {
+    console.log("Received reel should watch from background:", message.data.ai_summary);
+  }
+
+
   return true;
 });
 
