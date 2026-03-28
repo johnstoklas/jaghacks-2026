@@ -2,88 +2,57 @@ import { processReelBatch } from './utils.js';
 import { handleLikePost, handleScrollReel, handleOpenComments } from './actions.js';
 import { handleCreateRun } from './runsServices.js';
 
-
-console.log("background script loaded");
-
-chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
-    console.log("Received message of type:", message?.type);
-
-    if (message?.type !== 'REEL_BATCH_INTERCEPTED') {
-		return false;
-	}
-
-    console.log("Received message to process reel batch of shortcodes, length=", message?.payload?.reels?.length || 0);
-
-	const reels = message?.payload?.reels || [];
-	const authContext = message?.payload?.authContext || {};
-
-	(async () => {
-		const results = [];
-
-		for (const reel of reels) {
-            const shortcode = reel?.node?.media?.code;
-			const result = await uploadToAPIAndSummarize(shortcode, authContext);
-			if (result) {
-				results.push(result);
-				console.log("AI summary for shortcode", shortcode, ":", result);
-			}
-		}
-
-		console.log('Finished processing shortcode batch. count=', results.length);
-
-		sendResponse({
-			ok: true,
-			processedCount: results.length,
-			results,
-		});
-	})().catch((error) => {
-		console.error('Failed to process reel shortcodes in background', error);
-		sendResponse({
-			ok: false,
-			error: error?.message || 'Unknown error',
-		});
-	});
-
-	return true;
-});
-
 console.log("background script loaded");
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (!message?.action) return false;
-  
+
   const { action, data } = message;
 
-  chrome.tabs.query({ active: true, currentWindow: true }, async (tabs) => {
-    const tabId = tabs[0]?.id;
+  const getActiveTabId = async () => {
+    const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+    return tabs[0]?.id;
+  };
 
-    if (!tabId) {
-      sendResponse({ success: false, error: "No active tab found" });
-      return;
-    }
-
+  (async () => {
     try {
       switch (action) {
-        case "likePost":
+        case "likePost": {
+          const tabId = await getActiveTabId();
+          if (!tabId) throw new Error("No active tab found");
+
           await handleLikePost(tabId);
           sendResponse({ success: true });
           break;
+        }
 
-        case "scrollReel":
+        case "scrollReel": {
+          const tabId = await getActiveTabId();
+          if (!tabId) throw new Error("No active tab found");
+
           await handleScrollReel(tabId);
           sendResponse({ success: true });
           break;
+        }
 
-        case "openComments":
+        case "openComments": {
+          const tabId = await getActiveTabId();
+          if (!tabId) throw new Error("No active tab found");
+
           await handleOpenComments(tabId);
           sendResponse({ success: true });
           break;
+        }
 
         case "processReelBatch":
-            console.log("Processing reel batch:", data.reels);
-            const ai_summaries = await processReelBatch(data.reels, data.authContext);
-            sendResponse({ success: true, ai_summaries });
-            break;
+          console.log("Processing reel batch:", data.reels);
+          await processReelBatch(data.reels, data.authContext);
+          sendResponse({ success: true });
+          break;
+
+        case "getReelData":
+          sendResponse({ success: true, data: latestReelData });
+          break;
 
         case "createRun":
           await handleCreateRun(data.items);
@@ -99,7 +68,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         error: error instanceof Error ? error.message : String(error),
       });
     }
-  });
+  })();
 
   return true;
 });

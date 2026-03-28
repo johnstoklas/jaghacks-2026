@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { Check, Heart, X, Loader2, Square } from "lucide-react";
+import { useState, useEffect } from "react";
+import { Check, Loader2, Square } from "lucide-react";
 
 type TopicStat = {
   label: string;
@@ -28,12 +28,7 @@ export default function ScraperPage() {
     { label: "other", percent: 40 },
   ]);
 
-  const [upcomingReels, setUpcomingReels] = useState<ReelItem[]>([
-    { id: 1, title: "Golden retriever playing in snow", approved: true },
-    { id: 2, title: "Cat jumping onto kitchen counter", approved: null },
-    { id: 3, title: "Random meme edit", approved: false },
-    { id: 4, title: "Puppy training reel", approved: null },
-  ]);
+  const [reels, setReels] = useState<ReelItem[]>([]);
 
   const [steps] = useState<RunStep[]>([
     { label: "Analyzing reel", status: "done" },
@@ -42,11 +37,11 @@ export default function ScraperPage() {
     { label: "Updating algorithm", status: "pending" },
   ]);
 
-  const markReel = (id: number, approved: boolean) => {
-    setUpcomingReels((prev) =>
-      prev.map((reel) => (reel.id === id ? { ...reel, approved } : reel))
-    );
-  };
+  // const markReel = (id: number, approved: boolean) => {
+  //   setUpcomingReels((prev) =>
+  //     prev.map((reel) => (reel.id === id ? { ...reel, approved } : reel))
+  //   );
+  // };
 
   const handleStop = () => {
     chrome.runtime.sendMessage({ action: "stopRun" }, (response) => {
@@ -57,6 +52,25 @@ export default function ScraperPage() {
       console.log("Stopped:", response);
     });
   };
+
+  useEffect(() => {
+    chrome.storage.local.get(["latestReelData"], (result) => {
+      const reelsObject = result.latestReelData || {};
+      setReels(Object.values(reelsObject));
+    });
+  }, []);
+
+  useEffect(() => {
+    const listener = (changes: any, areaName: string) => {
+      if (areaName === "local" && changes.latestReelData) {
+        setReels(changes.latestReelData.newValue || {});
+      }
+    };
+
+    chrome.storage.onChanged.addListener(listener);
+
+    return () => chrome.storage.onChanged.removeListener(listener);
+  }, []);
 
   return (
     <>
@@ -108,7 +122,7 @@ export default function ScraperPage() {
               Currently processing:
             </p>
             <p className="text-sm text-gray-600 mt-1">
-              “Funny dog learning tricks”
+              {reels[1]?.title || "Loading..."}
             </p>
           </div>
 
@@ -145,7 +159,7 @@ export default function ScraperPage() {
         {/* Bottom controls */}
         <div className="absolute bottom-0 left-0 w-full p-3 bg-white/95 backdrop-blur-sm border-t border-pink-100">
           <div className="flex gap-3">
-            <button
+            {/* <button
               onClick={() => setShowUpcomingModal(true)}
               className="
                 flex-1 py-3 rounded-2xl bg-white font-semibold
@@ -154,7 +168,7 @@ export default function ScraperPage() {
               "
             >
               Upcoming
-            </button>
+            </button> */}
 
             <button
               onClick={handleStop}
@@ -197,7 +211,7 @@ export default function ScraperPage() {
               </button>
             </div>
 
-            <div className="space-y-3 max-h-[420px] overflow-y-auto pr-1">
+            {/* <div className="space-y-3 max-h-[420px] overflow-y-auto pr-1">
               {upcomingReels.map((reel) => (
                 <div
                   key={reel.id}
@@ -241,7 +255,7 @@ export default function ScraperPage() {
                   </div>
                 </div>
               ))}
-            </div>
+            </div> */}
           </div>
         </div>
       )}
