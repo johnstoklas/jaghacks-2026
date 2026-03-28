@@ -1,0 +1,96 @@
+# --- Environment & secrets (never commit) ---
+.env
+.env.*
+!.env.example
+
+# --- Python bytecode & caches ---
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# --- Virtual environments ---
+.venv/
+venv/
+ENV/
+env/
+.virtualenv/
+
+# --- Distribution / packaging ---
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+pip-wheel-metadata/
+
+# --- Installer logs ---
+pip-log.txt
+pip-delete-this-directory.txt
+
+# --- Unit tests & coverage ---
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+.nox/
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+pytestdebug.log
+
+# --- Type checkers & linters ---
+.mypy_cache/
+.dmypy.json
+dmypy.json
+.pytype/
+.ruff_cache/
+
+# --- Jupyter ---
+.ipynb_checkpoints/
+
+# --- pyenv ---
+.python-version
+
+# --- Celery ---
+celerybeat-schedule
+celerybeat.pid
+
+# --- FastAPI / ASGI runtime ---
+# Local SQLite or dev DB files (adjust if you commit fixtures)
+*.db
+*.sqlite3
+
+# --- Logs ---
+*.log
+logs/
+
+# --- IDE & editors ---
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# --- OS ---
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# --- Docker (optional local overrides) ---
+docker-compose.override.yml
