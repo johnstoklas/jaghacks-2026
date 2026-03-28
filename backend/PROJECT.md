@@ -13,6 +13,7 @@ A **Chrome extension** plus this **FastAPI backend** that work together as an **
 
 - **`POST /api/upload-and-summarize`** — Gemini Developer API (API key).
 - **`POST /api/upload-and-summarize-vertex`** — Compress with ffmpeg → upload to **GCS** → **Vertex AI** Gemini (team GCP defaults). Same JSON shape: `{"summary": "..."}`.
+- **`POST /api/runs/{run_id}/upload-and-match`** / **`.../upload-and-match-vertex`** — Same video upload; loads `Run.topics`, summarizes, then returns `{"match": true|false}` for keep vs skip.
 
 See [README.md](README.md) for run instructions and env vars.
 

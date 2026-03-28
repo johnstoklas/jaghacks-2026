@@ -3,14 +3,28 @@ import os
 import tempfile
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
+from sqlalchemy.orm import Session
 
 from app.config import Settings, get_settings
+from app.deps import get_db
+from app.models import Run
+from app.schemas.runs import MatchOut
 from app.services.gemini_summarize import summarize_video_path
+from app.services.topic_match import match_summary_to_topics_gemini, match_summary_to_topics_vertex
 from app.services.vertex_summarize import summarize_video_gcs
 from app.services.video_compress import compress_video_path
 
 router = APIRouter(tags=["summarize"])
+
+Db = Annotated[Session, Depends(get_db)]
+
+
+def _get_run_or_404(db: Session, run_id: int) -> Run:
+    run = db.get(Run, run_id)
+    if run is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Run not found")
+    return run
 
 ALLOWED_VIDEO_PREFIX = "video/"
 ALLOWED_EXTENSIONS = {".mp4", ".webm", ".mov", ".mpeg", ".avi", ".flv", ".wmv", ".3gpp"}
@@ -112,7 +126,7 @@ async def _read_upload_to_temp(
         raise
 
 
-@router.post("/api/upload-and-summarize")
+#@router.post("/api/upload-and-summarize")
 async def upload_and_summarize(
     video: Annotated[UploadFile, File(..., description="Video file to summarize")],
     settings: Annotated[Settings, Depends(get_settings)],
@@ -199,6 +213,144 @@ async def upload_and_summarize_vertex(
             raise HTTPException(status_code=502, detail=f"Vertex summarization failed: {e!s}") from e
 
         return {"summary": summary}
+    finally:
+        try:
+            os.unlink(tmp_path)
+        except OSError:
+            pass
+        if compressed_path:
+            try:
+                os.unlink(compressed_path)
+            except OSError:
+                pass
+
+
+#@router.post(
+#    "/api/runs/{run_id}/upload-and-match",
+#    response_model=MatchOut,
+#)
+async def upload_and_match(
+    run_id: int,
+    video: Annotated[UploadFile, File(..., description="Video file to evaluate against run topics")],
+    settings: Annotated[Settings, Depends(get_settings)],
+    db: Db,
+) -> MatchOut:
+    """Gemini: summarize reel, then YES/NO vs `Run.topics`. Returns `{"match": true|false}`."""
+    if not settings.gemini_api_configured:
+        raise HTTPException(
+            status_code=503,
+            detail="GEMINI_API_KEY is not set. Add it to your environment to use this route.",
+        )
+
+    run = _get_run_or_404(db, run_id)
+
+    tmp_path, mime_type = await _read_upload_to_temp(
+        video,
+        max_bytes=settings.max_upload_bytes,
+        max_upload_mb=settings.max_upload_mb,
+    )
+    try:
+        try:
+            assert settings.gemini_api_key is not None
+            summary = await asyncio.to_thread(
+                summarize_video_path,
+                tmp_path,
+                api_key=settings.gemini_api_key,
+                model=settings.gemini_model,
+                mime_type=mime_type,
+            )
+        except TimeoutError as e:
+            raise HTTPException(status_code=504, detail=str(e)) from e
+        except Exception as e:
+            raise HTTPException(status_code=502, detail=f"Summarization failed: {e!s}") from e
+
+        try:
+            matched = await asyncio.to_thread(
+                match_summary_to_topics_gemini,
+                summary,
+                run.topics,
+                api_key=settings.gemini_api_key,
+                model=settings.gemini_model,
+            )
+        except ValueError as e:
+            raise HTTPException(status_code=502, detail=f"Topic match parse failed: {e!s}") from e
+        except Exception as e:
+            raise HTTPException(status_code=502, detail=f"Topic match failed: {e!s}") from e
+
+        return MatchOut(match=matched)
+    finally:
+        try:
+            os.unlink(tmp_path)
+        except OSError:
+            pass
+
+
+@router.post(
+    "/api/runs/{run_id}/upload-and-match-vertex",
+    response_model=MatchOut,
+)
+async def upload_and_match_vertex(
+    run_id: int,
+    video: Annotated[UploadFile, File(..., description="Video file to evaluate against run topics")],
+    settings: Annotated[Settings, Depends(get_settings)],
+    db: Db,
+) -> MatchOut:
+    """Vertex: compress → GCS → summarize, then YES/NO vs `Run.topics`. Returns `{"match": true|false}`."""
+    if not settings.vertex_configured:
+        raise HTTPException(
+            status_code=503,
+            detail=(
+                "Vertex route is not configured. Set GCP_PROJECT_ID and GCS_BUCKET, "
+                "and configure Application Default Credentials (e.g. gcloud auth application-default login)."
+            ),
+        )
+
+    run = _get_run_or_404(db, run_id)
+
+    tmp_path, _mime_type = await _read_upload_to_temp(
+        video,
+        max_bytes=settings.max_upload_bytes,
+        max_upload_mb=settings.max_upload_mb,
+    )
+    compressed_path: str | None = None
+    try:
+        try:
+            compressed_path, _size_kb = await asyncio.to_thread(
+                compress_video_path,
+                tmp_path,
+                width=settings.compress_width,
+                height=settings.compress_height,
+                fps=settings.compress_fps,
+            )
+        except RuntimeError as e:
+            raise HTTPException(status_code=500, detail=str(e)) from e
+
+        try:
+            summary = await asyncio.to_thread(
+                summarize_video_gcs,
+                compressed_path,
+                project_id=settings.gcp_project_id,
+                bucket_name=settings.gcs_bucket,
+                model_name=settings.vertex_model,
+                mime_type="video/mp4",
+                delete_blob_after=settings.delete_gcs_after,
+            )
+        except Exception as e:
+            raise HTTPException(status_code=502, detail=f"Vertex summarization failed: {e!s}") from e
+
+        try:
+            matched = await asyncio.to_thread(
+                match_summary_to_topics_vertex,
+                summary,
+                run.topics,
+                model_name=settings.vertex_model,
+            )
+        except ValueError as e:
+            raise HTTPException(status_code=502, detail=f"Topic match parse failed: {e!s}") from e
+        except Exception as e:
+            raise HTTPException(status_code=502, detail=f"Topic match failed: {e!s}") from e
+
+        return MatchOut(match=matched)
     finally:
         try:
             os.unlink(tmp_path)

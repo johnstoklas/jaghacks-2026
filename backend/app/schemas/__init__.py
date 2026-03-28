@@ -1,4 +1,5 @@
 from app.schemas.runs import (
+    MatchOut,
     RunCreate,
     RunOut,
     RunUpdate,
@@ -7,6 +8,7 @@ from app.schemas.runs import (
 )
 
 __all__ = [
+    "MatchOut",
     "RunCreate",
     "RunOut",
     "RunUpdate",

@@ -4,9 +4,13 @@
 
 Two summarization routes (same multipart field `video`, same JSON `{"summary": "..."}`) so you can compare **Gemini API (API key)** vs **Vertex AI + GCS**.
 
+Run-scoped **topic match** routes take the same `video` field plus `run_id` in the path: they summarize internally, compare to `Run.topics`, and return `{"match": true|false}` (see table below).
+
 ## Database (single-tenant)
 
-Runs and saved reels are stored in SQLite by default (`DATABASE_URL=sqlite:///./jaghacks.db`). There is **no login or JWT**: one global list of runs for the app instance. After cloning, create tables:
+Runs and saved reels use **SQLite** by default (`DATABASE_URL=sqlite:///./jaghacks.db`) or **PostgreSQL** (e.g. Neon) if you set `DATABASE_URL` in `.env`. For Postgres, use the **`postgresql+psycopg://`** scheme (not plain `postgresql://`) so SQLAlchemy uses the bundled `psycopg` driver—paste Neon’s URL and only change the scheme. Keep `?sslmode=require` when Neon provides it.
+
+There is **no login or JWT**: one global list of runs for the app instance. After cloning, create tables:
 
 ```bash
 cd backend
@@ -62,6 +66,8 @@ Or: `python server.py`
 | GET | `/` | Service metadata |
 | POST | `/api/upload-and-summarize` | API key route; returns 503 if `GEMINI_API_KEY` missing |
 | POST | `/api/upload-and-summarize-vertex` | Vertex route; uses team GCP defaults unless overridden |
+| POST | `/api/runs/{run_id}/upload-and-match` | API key; multipart `video`; JSON `{"match": bool}` vs run’s `topics` |
+| POST | `/api/runs/{run_id}/upload-and-match-vertex` | Vertex path; same shape `{"match": bool}` |
 | GET | `/api/runs` | List all runs |
 | POST | `/api/runs` | JSON `{"name","topics"}` — create run |
 | GET | `/api/runs/{run_id}` | Run detail |
