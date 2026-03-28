@@ -1,8 +1,9 @@
+import os
 import shutil
 from pathlib import Path
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
 from fastapi.responses import FileResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -10,8 +11,14 @@ from sqlalchemy.orm import Session
 from app.config import Settings, get_settings
 from app.deps import get_db
 from app.models import Run, SavedReel
-from app.schemas.runs import RunCreate, RunOut, RunUpdate, SavedReelOut
-from app.services.reel_storage import guess_media_type, resolve_stored_video_file
+from app.schemas.runs import RunCreate, RunCreated, RunOut, RunUpdate, SavedReelOut, SeedKeywordGroup
+from app.services.keyword_expand import (
+    expand_seeds_gemini,
+    expand_seeds_vertex,
+    normalize_seeds_for_expansion,
+)
+from app.routers.summarize import _read_upload_to_temp, _suffix_from_filename
+from app.services.reel_storage import guess_media_type, persist_matched_reel_copy, resolve_stored_video_file
 
 router = APIRouter(prefix="/api/runs", tags=["runs"])
 
@@ -33,13 +40,70 @@ def list_runs(db: Db) -> list[Run]:
     return list(db.scalars(select(Run).order_by(Run.id.desc())).all())
 
 
-@router.post("", response_model=RunOut, status_code=status.HTTP_201_CREATED)
-def create_run(body: RunCreate, db: Db) -> Run:
-    run = Run(name=body.name.strip(), topics=body.topics.strip())
+def _run_to_created(run: Run) -> RunCreated:
+    raw = run.keyword_expansion
+    groups: list[SeedKeywordGroup] | None = None
+    if raw:
+        groups = [SeedKeywordGroup(**row) for row in raw]
+    return RunCreated(id=run.id, keyword_expansion=groups)
+
+
+@router.post("", response_model=RunCreated, status_code=status.HTTP_201_CREATED)
+def create_run(
+    body: RunCreate,
+    db: Db,
+    settings: Annotated[Settings, Depends(get_settings)],
+) -> RunCreated:
+    name = body.name.strip()
+    topics = body.topics.strip()
+    seeds = normalize_seeds_for_expansion(body.seed_words, topics)
+    kw: list | None = None
+    if seeds:
+        if settings.vertex_configured:
+            try:
+                kw = expand_seeds_vertex(seeds, model_name=settings.vertex_model)
+            except ValueError as e:
+                raise HTTPException(
+                    status_code=status.HTTP_502_BAD_GATEWAY,
+                    detail=f"Keyword expansion parse failed: {e!s}",
+                ) from e
+            except Exception as e:
+                raise HTTPException(
+                    status_code=status.HTTP_502_BAD_GATEWAY,
+                    detail=f"Keyword expansion failed: {e!s}",
+                ) from e
+        elif settings.gemini_api_configured:
+            try:
+                assert settings.gemini_api_key is not None
+                kw = expand_seeds_gemini(
+                    seeds,
+                    api_key=settings.gemini_api_key,
+                    model=settings.gemini_model,
+                )
+            except ValueError as e:
+                raise HTTPException(
+                    status_code=status.HTTP_502_BAD_GATEWAY,
+                    detail=f"Keyword expansion parse failed: {e!s}",
+                ) from e
+            except Exception as e:
+                raise HTTPException(
+                    status_code=status.HTTP_502_BAD_GATEWAY,
+                    detail=f"Keyword expansion failed: {e!s}",
+                ) from e
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail=(
+                    "Keyword expansion requires Vertex (GCP_PROJECT_ID + GCS_BUCKET) or "
+                    "GEMINI_API_KEY in the environment."
+                ),
+            )
+
+    run = Run(name=name, topics=topics, keyword_expansion=kw)
     db.add(run)
     db.commit()
     db.refresh(run)
-    return run
+    return _run_to_created(run)
 
 
 def _get_run_or_404(db: Session, run_id: int) -> Run:
@@ -80,6 +144,43 @@ def delete_run(run_id: int, db: Db) -> None:
     db.commit()
     if run_dir.is_dir():
         shutil.rmtree(run_dir, ignore_errors=True)
+
+
+@router.post(
+    "/{run_id}/saved-reels",
+    response_model=SavedReelOut,
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_saved_reel(
+    run_id: int,
+    video: Annotated[UploadFile, File(..., description="Video file to store for this run")],
+    db: Db,
+    settings: Annotated[Settings, Depends(get_settings)],
+    reel_ref: Annotated[str | None, Form()] = None,
+) -> SavedReelOut:
+    """Multipart: required `video`, optional `reel_ref`. Stores file under `REELS_STORAGE_DIR` and inserts `saved_reels`."""
+    _get_run_or_404(db, run_id)
+    tmp_path, _mime = await _read_upload_to_temp(
+        video,
+        max_bytes=settings.max_upload_bytes,
+        max_upload_mb=settings.max_upload_mb,
+    )
+    try:
+        rr = (reel_ref or "").strip() or None
+        reel = persist_matched_reel_copy(
+            db,
+            run_id=run_id,
+            source_file=tmp_path,
+            reel_ref=rr,
+            settings=settings,
+            file_suffix=_suffix_from_filename(video.filename),
+        )
+        return _saved_reel_out(reel)
+    finally:
+        try:
+            os.unlink(tmp_path)
+        except OSError:
+            pass
 
 
 @router.get("/{run_id}/saved-reels", response_model=list[SavedReelOut])
