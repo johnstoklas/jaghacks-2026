@@ -6,7 +6,7 @@ export default function Popup() {
   const [page, setPage] = useState<"home" | "scraper">("home");
   
   return (
-    <div className="w-[380px] max-w-md h-[600px] text-center backdrop-blur-xl bg-white/70 border border-blue-100 rounded-3xl shadow-xl p-6 flex flex-col">
+    <div className="w-[380px] max-w-md h-[600px] text-center p-6 flex flex-col relative">
       {page === "home" && <HomePage 
         setPage={setPage}
       />}

@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import Alert from "../component/alert";
 
 interface HomePageInterface {
     setPage: React.Dispatch<React.SetStateAction<"home" | "scraper">>;
@@ -7,6 +8,7 @@ interface HomePageInterface {
 const HomePage = ({ setPage }: HomePageInterface) => {
     const [onReels, setOnReels] = useState(false);
     const [items, setItems] = useState<string[]>([""]);
+    const [alert, setAlert] = useState<string | null>(null);
 
     useEffect(() => {
         chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
@@ -37,8 +39,18 @@ const HomePage = ({ setPage }: HomePageInterface) => {
 
     const handleClick = () => {
         if (onReels) {
+            // Trim + remove empty items
+            const cleanedItems = items
+                .map((item) => item.trim())
+                .filter((item) => item.length > 0);
+
+            // ❌ If nothing valid
+            if (cleanedItems.length === 0) {
+                setAlert("Please add at least one topic before starting.");
+                return;
+            }
             console.log("Begin scraping / logic here");
-            console.log("Items:", items);
+            console.log("Items:", cleanedItems);
             setPage("scraper");
         } else {
             chrome.tabs.create({
@@ -49,6 +61,12 @@ const HomePage = ({ setPage }: HomePageInterface) => {
 
     return (
         <>
+            {alert && (
+                <Alert
+                    message={alert}
+                    onClose={() => setAlert(null)}
+                />
+            )}
             <h1 className="text-4xl font-bold text-blue-600 mb-6 tracking-tight shrink-0">
             ReelDaddy
             </h1>
@@ -126,6 +144,7 @@ const HomePage = ({ setPage }: HomePageInterface) => {
             >
             {onReels ? "Begin" : "Open Instagram"}
             </button>
+            
         </>
     );
 }
