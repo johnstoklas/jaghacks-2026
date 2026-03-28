@@ -11,7 +11,7 @@ export default defineConfig({
       input: {
         popup: resolve(__dirname, 'popup.html'),
         background: resolve(__dirname, 'src/background/index.js'),
-        content: resolve(__dirname, 'src/content/index.js'),
+        content: resolve(__dirname, 'src/content/index.ts'),
         pageHook: resolve(__dirname, 'src/background/pageHook.js'),
       },
       output: {
