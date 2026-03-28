@@ -1,4 +1,4 @@
-import { uploadToAPIAndSummarize } from './utils.js';
+import { processReelBatch } from './utils.js';
 import { handleLikePost, handleScrollReel, handleOpenComments } from './actions.js';
 import { handleCreateRun } from './runsServices.js';
 
@@ -45,6 +45,10 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 
 	return true;
 });
+import { processReelBatch } from './utils.js';
+import { handleLikePost, handleScrollReel, handleOpenComments } from './actions.js';
+
+console.log("background script loaded");
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (!message?.action) return false;
@@ -75,6 +79,12 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           await handleOpenComments(tabId);
           sendResponse({ success: true });
           break;
+
+        case "processReelBatch":
+            console.log("Processing reel batch:", data.reels);
+            const ai_summaries = await processReelBatch(data.reels, data.authContext);
+            sendResponse({ success: true, ai_summaries });
+            break;
 
         case "createRun":
           await handleCreateRun(data.items);
