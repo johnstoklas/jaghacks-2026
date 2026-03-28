@@ -6,5 +6,25 @@
   "action": {
     "default_popup": "popup.html"
   },
-  "permissions": ["tabs"]
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "permissions": ["storage", "activeTab", "scripting", "tabs"],
+  "host_permissions": [
+    "*://*.instagram.com/*",
+    "http://localhost:8080/*"
+  ],
+  "content_scripts": [
+    {
+      "matches": ["*://*.instagram.com/*"],
+      "js": ["content.js"]
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": ["pageHook.js"],
+      "matches": ["*://*.instagram.com/*"]
+    }
+  ]
 }
