@@ -1,5 +1,6 @@
 const IG_BASE_URL = 'https://www.instagram.com/';
 const IG_SHORTCODE_ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_';
+let latestReelData = {};
 
 function getFetchOptions(authContext = {}) {
   return {
@@ -85,10 +86,13 @@ function extractMedia(postInfo) {
 }
 
 async function uploadVideoAndGetAISummary(file) {
+  console.log('are we getting here')
   const formData = new FormData();
   formData.append('video', file);
-
-  const response = await fetch('http://localhost:8080/api/upload-and-summarize', {
+  for (const [key, value] of formData.entries()) {
+    console.log(key, value);
+  }
+  const response = await fetch('http://localhost:8080/api/upload-and-summarize-vertex', {
     method: 'POST',
     body: formData,
   });
@@ -138,37 +142,50 @@ async function sendMessageToActiveTab(payload) {
 async function processReel(reel, authContext){
   const reelMedia = reel?.node?.media;
   const shortcode = reelMedia?.code;
+
+  if (!shortcode) return;
+
   const reelData = {
-    shortcode: shortcode,
+    shortcode,
     video_duration: reelMedia.video_duration || null,
     caption: reelMedia.caption?.text || null,
-    thumbnail_url: reelMedia.image_versions2?.candidates?.[0]?.url || null
+    thumbnail_url: reelMedia.image_versions2?.candidates?.[0]?.url || null,
+    ai_summary: null,
+    status: "loading",
   }
 
-  await sendMessageToActiveTab({
-    action: "reelData",
-    data: {
-      reelData,
-      authContext: authContext,
-    },
-  });
+  await upsertReelData(shortcode, reelData);
 
-  const ai_summary = await uploadToAPIAndSummarize(reelMedia, authContext);  
+  try {
+    const ai_summary = await uploadToAPIAndSummarize(reelMedia, authContext);
 
-  await sendMessageToActiveTab({
-    action: "reelShouldWatch",
-    data: {
-      ai_summary: ai_summary,
-      shouldWatch: true,
-      authContext: authContext,
-    },
-  });
+    await upsertReelData(shortcode, {
+      ai_summary,
+      status: "done",
+    });
+  } catch (error) {
+    console.error("Failed to summarize reel:", error);
 
-  console.log("Finished processing reel:", reel);
+    await upsertReelData(shortcode, {
+      ai_summary: null,
+      status: "error",
+    });
+  }
 }
 
 export async function processReelBatch(reels, authContext) {
   for (const reel of reels) {
     processReel(reel, authContext);
   }
+}
+
+async function upsertReelData(shortcode, partialData) {
+  latestReelData[shortcode] = {
+    ...(latestReelData[shortcode] || {}),
+    ...partialData,
+  };
+
+  await chrome.storage.local.set({
+    latestReelData,
+  });
 }
