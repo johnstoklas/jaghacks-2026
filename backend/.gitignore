@@ -76,6 +76,9 @@ celerybeat.pid
 *.db
 *.sqlite3
 
+# Stored reel uploads (upload-and-match when match is true)
+data/reels/
+
 # --- Logs ---
 *.log
 logs/

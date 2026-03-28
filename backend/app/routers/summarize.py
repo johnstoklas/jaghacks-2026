@@ -3,7 +3,7 @@ import os
 import tempfile
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
 from sqlalchemy.orm import Session
 
 from app.config import Settings, get_settings
@@ -11,6 +11,7 @@ from app.deps import get_db
 from app.models import Run
 from app.schemas.runs import MatchOut
 from app.services.gemini_summarize import summarize_video_path
+from app.services.reel_storage import persist_matched_reel_copy
 from app.services.topic_match import match_summary_to_topics_gemini, match_summary_to_topics_vertex
 from app.services.vertex_summarize import summarize_video_gcs
 from app.services.video_compress import compress_video_path
@@ -127,10 +128,10 @@ async def _read_upload_to_temp(
 
 
 #@router.post("/api/upload-and-summarize")
-async def upload_and_summarize(
-    video: Annotated[UploadFile, File(..., description="Video file to summarize")],
-    settings: Annotated[Settings, Depends(get_settings)],
-) -> dict[str, str]:
+#async def upload_and_summarize(
+#    video: Annotated[UploadFile, File(..., description="Video file to summarize")],
+#    settings: Annotated[Settings, Depends(get_settings)],
+#) -> dict[str, str]:
     """Gemini API (developer API key) + Files API upload."""
     if not settings.gemini_api_configured:
         raise HTTPException(
@@ -234,8 +235,9 @@ async def upload_and_match(
     video: Annotated[UploadFile, File(..., description="Video file to evaluate against run topics")],
     settings: Annotated[Settings, Depends(get_settings)],
     db: Db,
+    reel_ref: Annotated[str | None, Form()] = None,
 ) -> MatchOut:
-    """Gemini: summarize reel, then YES/NO vs `Run.topics`. Returns `{"match": true|false}`."""
+    """Gemini: summarize reel, structured match vs parsed `Run.topics`. If `match` is true, stores video + SavedReel."""
     if not settings.gemini_api_configured:
         raise HTTPException(
             status_code=503,
@@ -265,7 +267,7 @@ async def upload_and_match(
             raise HTTPException(status_code=502, detail=f"Summarization failed: {e!s}") from e
 
         try:
-            matched = await asyncio.to_thread(
+            result = await asyncio.to_thread(
                 match_summary_to_topics_gemini,
                 summary,
                 run.topics,
@@ -277,7 +279,18 @@ async def upload_and_match(
         except Exception as e:
             raise HTTPException(status_code=502, detail=f"Topic match failed: {e!s}") from e
 
-        return MatchOut(match=matched)
+        out = MatchOut(match=result.match, topic_matches=result.topic_matches)
+        if result.match:
+            rr = (reel_ref or "").strip() or None
+            persist_matched_reel_copy(
+                db,
+                run_id=run_id,
+                source_file=tmp_path,
+                reel_ref=rr,
+                settings=settings,
+                file_suffix=_suffix_from_filename(video.filename),
+            )
+        return out
     finally:
         try:
             os.unlink(tmp_path)
@@ -294,8 +307,9 @@ async def upload_and_match_vertex(
     video: Annotated[UploadFile, File(..., description="Video file to evaluate against run topics")],
     settings: Annotated[Settings, Depends(get_settings)],
     db: Db,
+    reel_ref: Annotated[str | None, Form()] = None,
 ) -> MatchOut:
-    """Vertex: compress → GCS → summarize, then YES/NO vs `Run.topics`. Returns `{"match": true|false}`."""
+    """Vertex: compress → GCS → summarize, structured match. If `match` is true, stores compressed mp4 + SavedReel."""
     if not settings.vertex_configured:
         raise HTTPException(
             status_code=503,
@@ -339,7 +353,7 @@ async def upload_and_match_vertex(
             raise HTTPException(status_code=502, detail=f"Vertex summarization failed: {e!s}") from e
 
         try:
-            matched = await asyncio.to_thread(
+            result = await asyncio.to_thread(
                 match_summary_to_topics_vertex,
                 summary,
                 run.topics,
@@ -350,7 +364,18 @@ async def upload_and_match_vertex(
         except Exception as e:
             raise HTTPException(status_code=502, detail=f"Topic match failed: {e!s}") from e
 
-        return MatchOut(match=matched)
+        out = MatchOut(match=result.match, topic_matches=result.topic_matches)
+        if result.match and compressed_path:
+            rr = (reel_ref or "").strip() or None
+            persist_matched_reel_copy(
+                db,
+                run_id=run_id,
+                source_file=compressed_path,
+                reel_ref=rr,
+                settings=settings,
+                file_suffix=".mp4",
+            )
+        return out
     finally:
         try:
             os.unlink(tmp_path)

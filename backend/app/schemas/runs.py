@@ -22,20 +22,14 @@ class RunOut(BaseModel):
     model_config = {"from_attributes": True}
 
 
-class SavedReelCreate(BaseModel):
-    reel_ref: str = Field(..., min_length=1, max_length=2048)
-    summary: str | None = None
-
-
 class SavedReelOut(BaseModel):
     id: int
     run_id: int
-    reel_ref: str
-    summary: str | None
+    reel_ref: str | None
     created_at: datetime
-
-    model_config = {"from_attributes": True}
+    video_url: str
 
 
 class MatchOut(BaseModel):
     match: bool
+    topic_matches: dict[str, bool]

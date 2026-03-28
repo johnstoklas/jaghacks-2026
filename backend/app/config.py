@@ -34,6 +34,12 @@ class Settings(BaseSettings):
     compress_height: int = 960
     compress_fps: int = 5
 
+    # Matched reels stored under this directory (relative to cwd when server starts)
+    reels_storage_dir: str = Field(
+        default="data/reels",
+        validation_alias=AliasChoices("REELS_STORAGE_DIR"),
+    )
+
     # Database (single-tenant: runs + saved reels, no login)
     database_url: str = Field(
         default="sqlite:///./jaghacks.db",

@@ -1,16 +1,31 @@
+import shutil
+from pathlib import Path
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.responses import FileResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.config import Settings, get_settings
 from app.deps import get_db
 from app.models import Run, SavedReel
-from app.schemas.runs import RunCreate, RunOut, RunUpdate, SavedReelCreate, SavedReelOut
+from app.schemas.runs import RunCreate, RunOut, RunUpdate, SavedReelOut
+from app.services.reel_storage import guess_media_type, resolve_stored_video_file
 
 router = APIRouter(prefix="/api/runs", tags=["runs"])
 
 Db = Annotated[Session, Depends(get_db)]
+
+
+def _saved_reel_out(reel: SavedReel) -> SavedReelOut:
+    return SavedReelOut(
+        id=reel.id,
+        run_id=reel.run_id,
+        reel_ref=reel.reel_ref,
+        created_at=reel.created_at,
+        video_url=f"/api/runs/{reel.run_id}/saved-reels/{reel.id}/video",
+    )
 
 
 @router.get("", response_model=list[RunOut])
@@ -59,35 +74,37 @@ def update_run(run_id: int, body: RunUpdate, db: Db) -> Run:
 @router.delete("/{run_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_run(run_id: int, db: Db) -> None:
     run = _get_run_or_404(db, run_id)
+    settings = get_settings()
+    run_dir = Path(settings.reels_storage_dir).resolve() / str(run_id)
     db.delete(run)
     db.commit()
+    if run_dir.is_dir():
+        shutil.rmtree(run_dir, ignore_errors=True)
 
 
 @router.get("/{run_id}/saved-reels", response_model=list[SavedReelOut])
-def list_saved_reels(run_id: int, db: Db) -> list[SavedReel]:
+def list_saved_reels(run_id: int, db: Db) -> list[SavedReelOut]:
     _get_run_or_404(db, run_id)
-    return list(
+    reels = list(
         db.scalars(
             select(SavedReel)
             .where(SavedReel.run_id == run_id)
             .order_by(SavedReel.id.desc())
         ).all()
     )
+    return [_saved_reel_out(r) for r in reels]
 
 
-@router.post(
-    "/{run_id}/saved-reels",
-    response_model=SavedReelOut,
-    status_code=status.HTTP_201_CREATED,
-)
-def create_saved_reel(run_id: int, body: SavedReelCreate, db: Db) -> SavedReel:
+@router.get("/{run_id}/saved-reels/{saved_reel_id}/video")
+def get_saved_reel_video(
+    run_id: int,
+    saved_reel_id: int,
+    db: Db,
+    settings: Annotated[Settings, Depends(get_settings)],
+) -> FileResponse:
     _get_run_or_404(db, run_id)
-    reel = SavedReel(
-        run_id=run_id,
-        reel_ref=body.reel_ref.strip(),
-        summary=body.summary.strip() if body.summary else None,
-    )
-    db.add(reel)
-    db.commit()
-    db.refresh(reel)
-    return reel
+    reel = db.get(SavedReel, saved_reel_id)
+    if reel is None or reel.run_id != run_id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Saved reel not found")
+    path = resolve_stored_video_file(settings, reel.video_path)
+    return FileResponse(path, media_type=guess_media_type(path.suffix))

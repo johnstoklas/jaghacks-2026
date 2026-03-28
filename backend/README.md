@@ -4,7 +4,13 @@
 
 Two summarization routes (same multipart field `video`, same JSON `{"summary": "..."}`) so you can compare **Gemini API (API key)** vs **Vertex AI + GCS**.
 
-Run-scoped **topic match** routes take the same `video` field plus `run_id` in the path: they summarize internally, compare to `Run.topics`, and return `{"match": true|false}` (see table below).
+Run-scoped **topic match** routes take the same `video` field plus `run_id` in the path: they summarize internally, compare to `Run.topics` (comma-separated labels), and return `{"match": bool, "topic_matches": { "<topic>": bool, ... }}`.
+
+**Auto-save:** If `match` is **true**, the server also **stores the video** under `REELS_STORAGE_DIR` (default `data/reels/`) and inserts a **`saved_reels`** row for that run. If `match` is **false**, nothing is persisted (no extra request needed). Optional multipart field **`reel_ref`** (e.g. Instagram reel id) is saved when a row is created.
+
+**Vertex path** persists the **compressed** `.mp4` (what the model saw). **Gemini path** persists the **original upload** (same file used for summarization).
+
+There is **no** server-side analytics aggregation endpoint; the client can use `topic_matches` from each response.
 
 ## Database (single-tenant)
 
@@ -19,6 +25,8 @@ alembic upgrade head
 ```
 
 Migrations live under `alembic/versions/` with numeric prefixes (e.g. `001_runs_saved_reels.py`, revision `001`). If you already applied an older revision id before this rename, either use a fresh DB or run `alembic stamp 001` so `alembic_version` matches.
+
+**Schema drift (e.g. Neon):** If `alembic_version` is `002` but `saved_reels` still has legacy columns (`match`, `topic_matches`, `summary`) or lacks `video_path`, run `alembic upgrade head` — revision **`003`** rebuilds `saved_reels` to the MVP shape (**all rows in that table are removed**).
 
 ## Gemini API route (extension default)
 
@@ -66,17 +74,17 @@ Or: `python server.py`
 | GET | `/` | Service metadata |
 | POST | `/api/upload-and-summarize` | API key route; returns 503 if `GEMINI_API_KEY` missing |
 | POST | `/api/upload-and-summarize-vertex` | Vertex route; uses team GCP defaults unless overridden |
-| POST | `/api/runs/{run_id}/upload-and-match` | API key; multipart `video`; JSON `{"match": bool}` vs run’s `topics` |
-| POST | `/api/runs/{run_id}/upload-and-match-vertex` | Vertex path; same shape `{"match": bool}` |
+| POST | `/api/runs/{run_id}/upload-and-match` | Multipart `video`, optional `reel_ref` (form); JSON `match` + `topic_matches`; saves file + DB row **only if** `match` is true |
+| POST | `/api/runs/{run_id}/upload-and-match-vertex` | Same; stores compressed mp4 when `match` is true |
 | GET | `/api/runs` | List all runs |
 | POST | `/api/runs` | JSON `{"name","topics"}` — create run |
 | GET | `/api/runs/{run_id}` | Run detail |
 | PATCH | `/api/runs/{run_id}` | Optional `name` / `topics` |
-| DELETE | `/api/runs/{run_id}` | Deletes run and its saved reels |
-| GET | `/api/runs/{run_id}/saved-reels` | List saved reels for that run |
-| POST | `/api/runs/{run_id}/saved-reels` | JSON `{"reel_ref","summary"?}` — max 2048 chars for `reel_ref` |
+| DELETE | `/api/runs/{run_id}` | Deletes run and its saved reels; removes `data/reels/{run_id}/` on disk |
+| GET | `/api/runs/{run_id}/saved-reels` | List saved reels (`video_url` points at download route below) |
+| GET | `/api/runs/{run_id}/saved-reels/{saved_reel_id}/video` | Stream the stored video file |
 
-Max upload size: `MAX_UPLOAD_MB` (default 100).
+Max upload size: `MAX_UPLOAD_MB` (default 100). Stored reels use `REELS_STORAGE_DIR` (default `data/reels`).
 
 To A/B test with the browser extension, change the URL in `post.js` from `/api/upload-and-summarize` to `/api/upload-and-summarize-vertex`.
 
