@@ -1,8 +1,6 @@
 const IG_BASE_URL = 'https://www.instagram.com/';
 const IG_SHORTCODE_ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_';
 
-const processedShortcodes = new Set();
-
 function getFetchOptions(authContext = {}) {
   return {
     headers: {
@@ -103,19 +101,21 @@ async function uploadVideoAndGetAISummary(file) {
   return data.summary;
 }
 
-export async function uploadToAPIAndSummarize(shortcode, authContext = {}) {
-  if (!shortcode || processedShortcodes.has(shortcode)) {
-    return null;
-  }
-
-  processedShortcodes.add(shortcode);
+async function uploadToAPIAndSummarize(shortcode, authContext = {}) {
+  let data = {};
 
   try {
     const postInfo = await getPostInfo(shortcode, authContext);
     if (!postInfo) return null;
 
-    const media = extractMedia(postInfo);
-    const summaries = [];
+    data = {
+      shortcode: shortcode,
+      video_duration: postInfo.video_duration || null,
+      caption: postInfo.caption?.text || null,
+      thumbnail_url: postInfo.image_versions2?.candidates?.[0]?.url || null
+    }
+
+    const media = extractMedia(postInfo); 
 
     for (const item of media) {
       if (!item.isVideo) continue;
@@ -123,17 +123,27 @@ export async function uploadToAPIAndSummarize(shortcode, authContext = {}) {
       const mediaResponse = await fetch(item.url);
       const blob = await mediaResponse.blob();
       const file = new File([blob], `video_${item.id}.mp4`, { type: 'video/mp4' });
-      const summary = await uploadVideoAndGetAISummary(file);
-      summaries.push({ mediaId: item.id, summary });
+      data.ai_summary = await uploadVideoAndGetAISummary(file);
+      break;
     }
 
-    return {
-      shortcode,
-      summaries,
-      mediaCount: media.length,
-    };
+    return data;
   } catch (error) {
-    console.error('Failed processing reel shortcode', shortcode, error);
+    console.error('Failed getting AI summary for reel with shortcode', shortcode, error);
     return null;
   }
+}
+
+export async function processReelBatch(reels, authContext) {
+    const ai_summaries = {};
+    for (const reel of reels) {
+        const shortcode = reel?.node?.media?.code;
+        const result = await uploadToAPIAndSummarize(shortcode, authContext);
+        if (result) {
+            console.log("AI summary for shortcode", shortcode, ":", result);
+            ai_summaries[shortcode] = result;
+        }
+    }
+    console.log("AI summaries for reel batch:", ai_summaries);
+    return ai_summaries;
 }
