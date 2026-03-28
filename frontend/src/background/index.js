@@ -2,6 +2,7 @@ import { processReelBatch } from './utils.js';
 import { handleLikePost, handleScrollReel, handleOpenComments } from './actions.js';
 import { handleCreateRun } from './runsServices.js';
 
+
 console.log("background script loaded");
 
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
@@ -45,8 +46,6 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 
 	return true;
 });
-import { processReelBatch } from './utils.js';
-import { handleLikePost, handleScrollReel, handleOpenComments } from './actions.js';
 
 console.log("background script loaded");
 
