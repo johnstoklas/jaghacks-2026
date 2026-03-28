@@ -1,4 +1,4 @@
-import { processReelShortcode } from './instagramPipeline.js';
+import { processReelShortcode } from '../background/instagramPipeline.js';
 
 function injectPageHook() {
   const script = document.createElement('script');
@@ -24,9 +24,12 @@ async function processShortcode(shortcode) {
 function setupListeners() {
   window.addEventListener('reelsBatchIntercepted', async (event) => {
     const edges = event?.detail?.reels?.edges || [];
+
+    console.log('Reels batch intercepted of length:', edges.length);
     for (const edge of edges) {
       const shortcode = edge?.node?.media?.code;
-      await processShortcode(shortcode);
+      console.log('Processing shortcode:', shortcode);
+      processShortcode(shortcode);
     }
   });
 
