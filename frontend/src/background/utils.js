@@ -170,11 +170,10 @@ async function processReel(reel, authContext){
     thumbnail_url: reelMedia.image_versions2?.candidates?.[0]?.url || null
   }
 
-
   const ai_summary = await uploadToAPIAndSummarize(reelMedia, authContext);  
 
   reelData.ai_summary = ai_summary;
-  reelData.shouldWatch = true;
+  reelData.approved = true;
 
   await broadcastReelData(reelData);
 

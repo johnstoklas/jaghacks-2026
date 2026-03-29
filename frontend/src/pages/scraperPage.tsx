@@ -13,6 +13,7 @@ type ReelData = {
   thumbnail_url?: string | null;
   ai_summary?: string | null;
   approved?: boolean | null;
+  shouldWatch?: boolean | null;
 };
 
 type StepStatus = "done" | "active" | "pending";
@@ -23,8 +24,12 @@ type RunStep = {
 };
 
 export default function ScraperPage() {
+  const DEFAULT_TIMER_SECONDS = 15;
+
   const [showUpcomingModal, setShowUpcomingModal] = useState(false);
   const [currentReel, setCurrentReel] = useState<ReelData | null>(null);
+  const [pageUrl, setPageUrl] = useState("");
+  const [timer, setTimer] = useState(DEFAULT_TIMER_SECONDS);
 
   const [topics] = useState<TopicStat[]>([
     { label: "dogs", percent: 20 },
@@ -32,7 +37,7 @@ export default function ScraperPage() {
     { label: "other", percent: 40 },
   ]);
 
-  const [upcomingReels, setUpcomingReels] = useState<ReelData[]>([]);
+  const [upcomingReels, setUpcomingReels] = useState<Record<string, ReelData>>({});
 
   const [steps] = useState<RunStep[]>([
     { label: "Analyzing reel", status: "done" },
@@ -41,25 +46,106 @@ export default function ScraperPage() {
     { label: "Updating algorithm", status: "pending" },
   ]);
 
-  const getReelKey = (reel: ReelData, index = 0): string => {
-    return (
-      reel.shortcode ||
-      reel.thumbnail_url ||
-      `${reel.caption || reel.ai_summary || "reel"}-${reel.video_duration || 0}-${index}`
-    );
-  };
-
   const getReelTitle = (reel: ReelData): string => {
     return reel.caption?.trim() || reel.ai_summary?.trim() || "Untitled reel";
   };
 
-  const markReel = (key: string, approved: boolean) => {
-    setUpcomingReels((prev) =>
-      prev.map((reel, index) =>
-        getReelKey(reel, index) === key ? { ...reel, approved } : reel
-      )
-    );
+  const markReel = (shortcode: string, approved: boolean) => {
+    setUpcomingReels((prev) => {
+      const reel = prev[shortcode];
+      if (!reel) return prev;
+
+      return {
+        ...prev,
+        [shortcode]: { ...reel, approved },
+      };
+    });
   };
+
+  const setTimerValue = (seconds: number) => {
+    setTimer(Math.max(0, Math.floor(seconds)));
+  };
+
+  const getTimerSecondsForReel = (reel: ReelData): number => {
+    if (!reel.approved) return 1; // skip instantly
+
+    if (typeof reel.video_duration !== "number" || !Number.isFinite(reel.video_duration)) {
+      return DEFAULT_TIMER_SECONDS;
+    }
+
+    return Math.max(1, Math.ceil(reel.video_duration + 1));
+  };
+
+  const setCurrentReelWithTimer = (reel: ReelData) => {
+    setCurrentReel(reel);
+    setTimerValue(getTimerSecondsForReel(reel));
+  };
+
+  const scrollToNextReel = () => {
+    chrome.runtime.sendMessage({ action: "scrollReel" }, (response) => {
+      if (chrome.runtime.lastError) {
+        console.error("Error:", chrome.runtime.lastError.message);
+        return;
+      }
+      console.log("Scrolled to next reel:", response);
+    });
+  };
+
+  const getShortcodeFromUrl = (url: string): string | null => {
+    if (!url) return null;
+
+    try {
+      const parsed = new URL(url);
+      const segments = parsed.pathname.split("/").filter(Boolean);
+      return segments.at(-1) || null;
+    } catch {
+      const segments = url.split("/").filter(Boolean);
+      return segments.at(-1) || null;
+    }
+  };
+
+  useEffect(() => {
+    const syncActiveTabUrl = () => {
+      chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+        setPageUrl(tabs[0]?.url || "");
+      });
+    };
+
+    syncActiveTabUrl();
+
+    const handleActivated = () => {
+      syncActiveTabUrl();
+    };
+
+    const handleUpdated: Parameters<typeof chrome.tabs.onUpdated.addListener>[0] = (
+      _tabId,
+      changeInfo,
+      tab
+    ) => {
+      if (!tab.active) return;
+      if (typeof changeInfo.url === "string") {
+        setPageUrl(changeInfo.url);
+        return;
+      }
+      if (changeInfo.status === "complete") {
+        setPageUrl(tab.url || "");
+      }
+    };
+
+    const handleWindowFocus = () => {
+      syncActiveTabUrl();
+    };
+
+    chrome.tabs.onActivated.addListener(handleActivated);
+    chrome.tabs.onUpdated.addListener(handleUpdated);
+    chrome.windows.onFocusChanged.addListener(handleWindowFocus);
+
+    return () => {
+      chrome.tabs.onActivated.removeListener(handleActivated);
+      chrome.tabs.onUpdated.removeListener(handleUpdated);
+      chrome.windows.onFocusChanged.removeListener(handleWindowFocus);
+    };
+  }, []);
 
   useEffect(() => {
     chrome.storage.local.get(["latestReelData", "reelFeed"], (stored) => {
@@ -69,11 +155,21 @@ export default function ScraperPage() {
         : [];
 
       if (latest) {
-        setCurrentReel(latest);
+        console.log("Latest reel data:", latest);
+        setCurrentReelWithTimer(latest);
       }
 
       if (feed.length > 0) {
-        setUpcomingReels(feed.map((reel) => ({ ...reel, approved: reel.approved ?? null })));
+        setUpcomingReels(
+          feed.reduce<Record<string, ReelData>>((acc, reel) => {
+            if (!reel.shortcode || acc[reel.shortcode]) return acc;
+            acc[reel.shortcode] = {
+              ...reel,
+              approved: reel.approved ?? reel.shouldWatch ?? null,
+            };
+            return acc;
+          }, {})
+        );
       }
     });
 
@@ -83,16 +179,21 @@ export default function ScraperPage() {
       _sendResponse: (response?: unknown) => void
     ) => {
       if (message.action !== "reelData" || !message.data) return;
+      if (!message.data.shortcode) return;
 
       const nextReel = message.data;
-      setCurrentReel(nextReel);
+      // setCurrentReel(nextReel);
       setUpcomingReels((prev) => {
-        const normalized = { ...nextReel, approved: nextReel.approved ?? null };
-        const nextKey = getReelKey(normalized);
-        return [
-          normalized,
-          ...prev.filter((item, index) => getReelKey(item, index) !== nextKey),
-        ].slice(0, 50);
+        const shortcode = nextReel.shortcode as string;
+        const normalized = {
+          ...nextReel,
+          approved: nextReel.approved ?? nextReel.shouldWatch ?? null,
+        };
+
+        return {
+          ...prev,
+          [shortcode]: normalized,
+        };
       });
     };
 
@@ -101,6 +202,33 @@ export default function ScraperPage() {
       chrome.runtime.onMessage.removeListener(handleRuntimeMessage);
     };
   }, []);
+
+  useEffect(() => {
+    const shortcode = getShortcodeFromUrl(pageUrl);
+    if (!shortcode) return;
+
+    const matchedReel = upcomingReels[shortcode];
+    if (!matchedReel) return;
+
+    setCurrentReelWithTimer(matchedReel);
+  }, [pageUrl, upcomingReels]);
+
+  useEffect(() => {
+    const intervalId = window.setInterval(() => {
+      setTimer((prev) => (prev > 0 ? prev - 1 : prev));
+    }, 1000);
+
+    return () => {
+      window.clearInterval(intervalId);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (timer > 0) return;
+
+    scrollToNextReel();
+    setTimerValue(DEFAULT_TIMER_SECONDS);
+  }, [timer]);
 
   const handleStop = () => {
     chrome.runtime.sendMessage({ action: "stopRun" }, (response) => {
@@ -161,9 +289,22 @@ export default function ScraperPage() {
             <p className="text-sm font-medium text-gray-800">
               Currently processing:
             </p>
-            <p className="text-sm text-gray-600 mt-1">
-              {currentReel?.caption || currentReel?.ai_summary || "Waiting for first reel..."}
+            <p className="text-xs text-gray-500 mt-1 truncate" title={pageUrl || "Unknown URL"}>
+              {pageUrl || "Unknown URL"}
             </p>
+            <p className="text-xs text-gray-500 mt-1">Next scroll in {timer}s</p>
+            <div>
+              {currentReel?.thumbnail_url && (
+                <img
+                  src={currentReel.thumbnail_url}
+                  alt="Current reel thumbnail"
+                  className="mt-2 w-full h-36 object-cover rounded-lg border border-pink-100"
+                />
+              )}
+              <p className="text-sm text-gray-600 mt-1">
+                {currentReel?.caption || currentReel?.ai_summary || "Waiting for first reel..."}
+              </p>
+            </div>
           </div>
 
           <div className="space-y-2">
@@ -252,9 +393,9 @@ export default function ScraperPage() {
             </div>
 
             <div className="space-y-3 max-h-[420px] overflow-y-auto pr-1">
-              {upcomingReels.map((reel) => (
+              {Object.entries(upcomingReels).map(([shortcode, reel]) => (
                 <div
-                  key={getReelKey(reel)}
+                  key={shortcode}
                   className="flex items-center justify-between gap-3 rounded-xl border border-pink-100 bg-gradient-to-r from-white to-pink-50 px-3 py-3"
                 >
                   <div className="flex-1 min-w-0">
@@ -272,7 +413,7 @@ export default function ScraperPage() {
 
                   <div className="flex items-center gap-2 shrink-0">
                     <button
-                      onClick={() => markReel(getReelKey(reel), false)}
+                      onClick={() => markReel(shortcode, false)}
                       className={`p-2 rounded-full border transition ${
                         reel.approved === false
                           ? "bg-red-100 border-red-200 text-red-600"
@@ -283,7 +424,7 @@ export default function ScraperPage() {
                     </button>
 
                     <button
-                      onClick={() => markReel(getReelKey(reel), true)}
+                      onClick={() => markReel(shortcode, true)}
                       className={`p-2 rounded-full border transition ${
                         reel.approved === true
                           ? "bg-pink-100 border-pink-200 text-pink-600"
