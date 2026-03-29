@@ -4,9 +4,9 @@
 
 Two summarization routes (same multipart field `video`, same JSON `{"summary": "..."}`) so you can compare **Gemini API (API key)** vs **Vertex AI + GCS**.
 
-Run-scoped **topic match** routes take the same `video` field plus `run_id` in the path: they summarize internally, compare to `Run.topics` (comma-separated labels), and return `{"match": bool, "topic_matches": { "<topic>": bool, ... }}`.
+Run-scoped **topic match** routes take the same `video` field plus `run_id` in the path: they summarize internally, compare to `Run.topics` (comma-separated labels), and return `{"match": bool, "topic_matches": { "<topic>": bool, ... }}`. When **`match` is true**, the server also **stores** the uploaded file and inserts a **`saved_reels`** row (same as `POST .../saved-reels`).
 
-**Saving reels:** `upload-and-match-*` only returns JSON (`match` + `topic_matches`). To **store** a copy of the video, call **`POST /api/runs/{run_id}/saved-reels`** with multipart **`video`** and optional **`reel_ref`** (e.g. Instagram reel id). Files go under `REELS_STORAGE_DIR` (default `data/reels/`).
+**Saving reels without matching:** call **`POST /api/runs/{run_id}/saved-reels`** with multipart **`video`** and optional **`reel_ref`** (e.g. Instagram reel id). Files go under `REELS_STORAGE_DIR` (default `data/reels/`).
 
 There is **no** server-side analytics aggregation endpoint; the client can use `topic_matches` from each response.
 
@@ -72,11 +72,11 @@ Or: `python server.py`
 | GET | `/` | Service metadata |
 | POST | `/api/upload-and-summarize` | API key route; returns 503 if `GEMINI_API_KEY` missing |
 | POST | `/api/upload-and-summarize-vertex` | Vertex route; uses team GCP defaults unless overridden |
-| POST | `/api/runs/{run_id}/upload-and-match` | Multipart `video`; JSON `match` + `topic_matches` (no DB write) |
+| POST | `/api/runs/{run_id}/upload-and-match` | Multipart `video`; JSON `match` + `topic_matches`; on match, writes `saved_reels` + file |
 | POST | `/api/runs/{run_id}/upload-and-match-vertex` | Same (Vertex pipeline) |
 | POST | `/api/runs/{run_id}/saved-reels` | Multipart `video`, optional `reel_ref` — stores file + `saved_reels` row |
 | GET | `/api/runs` | List all runs (`keyword_expansion` on each run when present) |
-| POST | `/api/runs` | JSON `{"name","topics"}` and optional `seed_words` (max 20 strings). Creates a run and returns **`{"id","keyword_expansion"}`** only: `id` is the DB primary key; `keyword_expansion` is a list of `{ "seed", "keywords" }` from the LLM (or `null` if there are no seeds after parsing). Seeds come from `seed_words` when non-empty, otherwise from comma-split `topics`. **503** if seeds are non-empty but neither Vertex nor `GEMINI_API_KEY` is configured; **502** if the model output is invalid. |
+| POST | `/api/runs` | JSON `{"name","topics"}` (`topics` comma-separated labels). Returns **`{"id","topics"}`** where `topics` is an object mapping each topic string to its LLM-expanded keyword list (or `{}` if expansion skipped). Expansion seeds are derived from comma-split `topics`. **503** if expansion is needed but neither Vertex nor `GEMINI_API_KEY` is configured; **502** if the model output is invalid. |
 | GET | `/api/runs/{run_id}` | Run detail (full `RunOut` including `keyword_expansion`) |
 | PATCH | `/api/runs/{run_id}` | Optional `name` / `topics` |
 | DELETE | `/api/runs/{run_id}` | Deletes run and its saved reels; removes `data/reels/{run_id}/` on disk |
