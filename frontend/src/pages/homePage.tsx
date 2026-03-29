@@ -4,12 +4,27 @@ import { sendToBackground } from "../utils";
 
 interface HomePageInterface {
   setPage: React.Dispatch<React.SetStateAction<"home" | "scraper">>;
+  setHashtags: React.Dispatch<React.SetStateAction<string[]>>;
 }
 
-const HomePage = ({ setPage }: HomePageInterface) => {
+const HomePage = ({ setPage, setHashtags }: HomePageInterface) => {
   const [onInstagram, setOnInstagram] = useState(false);
   const [items, setItems] = useState<string[]>([""]);
   const [alert, setAlert] = useState<string | null>(null);
+
+  type KeywordExpansionItem = {
+  seed: string;
+  keywords: string[];
+};
+
+type ApiResponse = {
+  id: number;
+  keyword_expansion: KeywordExpansionItem[];
+};
+
+type BackgroundResponse = {
+  data: ApiResponse;
+};
 
   useEffect(() => {
     chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
@@ -58,9 +73,19 @@ const HomePage = ({ setPage }: HomePageInterface) => {
       try {
         const response = await sendToBackground("createRun", {
           items: cleanedItems,
-        });
-
+        }) as BackgroundResponse;
         console.log("Background response:", response);
+
+        const keywordExpansion = response.data.keyword_expansion;
+        console.log(keywordExpansion);
+        const hashtags = keywordExpansion.flatMap(item =>
+          item.keywords.map(word =>
+            word.replace(/^#/, "").replace(/\s+/g, "")
+          )
+        );
+
+        console.log(hashtags);
+        setHashtags(hashtags);
         setPage("scraper");
       } catch (err) {
         console.error("Failed to send message:", err);

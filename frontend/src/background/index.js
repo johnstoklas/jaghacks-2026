@@ -12,6 +12,38 @@ console.log("background script loaded");
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (!message?.action) return false;
 
+  if (message.action === "openAndSearchKeywords") {
+    const requestedTabId = message.data?.tabId;
+    const keywords = message.data?.keywords || [];
+
+    (async () => {
+      try {
+        let tabId = requestedTabId;
+        if (!tabId) {
+          const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+          tabId = tabs[0]?.id;
+        }
+
+        if (!tabId) throw new Error("No active tab found");
+
+        const response = await handleOpenAndSearchKeywords(tabId, keywords);
+        sendResponse({
+          success: response?.success ?? true,
+          action: "openAndSearchKeywords",
+          data: response?.data,
+        });
+      } catch (error) {
+        sendResponse({
+          success: false,
+          action: "openAndSearchKeywords",
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    })();
+
+    return true;
+  }
+
   const { action, data } = message;
 
   const getActiveTabId = async () => {
@@ -49,12 +81,6 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           break;
         }
 
-        case "openAndSearchKeywords": {
-          await handleOpenAndSearchKeywords(tabId, data?.keywords || []);
-          sendResponse({ success: true });
-          break;
-        }
-
         case "processReelBatch":
           console.log("Processing reel batch:", data.reels);
           await processReelBatch(data.reels, data.authContext);
@@ -66,8 +92,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           break;
 
         case "createRun":
-          await handleCreateRun(data.items);
-          sendResponse({ success: true });
+          const runData = await handleCreateRun(data.items);
+          sendResponse({ success: true, data: runData });
           break;
 
         default:

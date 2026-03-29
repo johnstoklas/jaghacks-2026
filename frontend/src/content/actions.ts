@@ -12,6 +12,10 @@ export function scrollToNextReel() {
   return true;
 }
 
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 export function likeCurrentPost() {
   const likeButton = [...document.querySelectorAll('svg[aria-label="Like"]')]
     .map((svg) => svg.closest('[role="button"], div'))
@@ -77,8 +81,7 @@ export async function openAndSearchKeywords(keywords: string[]) {
       (searchOverlay as HTMLElement).click();
     }
 
-    // wait 500ms
-    await new Promise((resolve) => setTimeout(resolve, 500));
+    await sleep(500);
 
     // enter the keywords into the search input
     const searchInput = document.querySelector('input[aria-label="Search input"]') as HTMLInputElement | null;
@@ -89,8 +92,7 @@ export async function openAndSearchKeywords(keywords: string[]) {
       searchInput.value = "#" + keyword;
       searchInput.dispatchEvent(new Event("input", { bubbles: true }));
 
-      // wait 5000ms for load
-      await new Promise((resolve) => setTimeout(resolve, 4000));
+      await sleep(4000);
 
       // select the first search result
       // href="/explore/tags/<keyword>/"
@@ -102,7 +104,7 @@ export async function openAndSearchKeywords(keywords: string[]) {
         (firstResult as HTMLElement).click();
 
         // first post
-        await new Promise((resolve) => setTimeout(resolve, 8000));
+        await sleep(8000);
         const first_post = document.querySelector('a[href^="/p/"][role="link"][tabindex="0"]');
 
         if(!first_post){
@@ -111,28 +113,50 @@ export async function openAndSearchKeywords(keywords: string[]) {
           console.log("First post found, clicking");
           (first_post as HTMLElement).click();
 
-          await new Promise((resolve) => setTimeout(resolve, 8000));
+          await sleep(8000);
+
+          const keywordPostLikeIcon = document.querySelector('svg[aria-label="Like"]');
+          const keywordPostLikeButton =
+            keywordPostLikeIcon?.closest('button, [role="button"]') ||
+            keywordPostLikeIcon?.parentElement ||
+            keywordPostLikeIcon;
+
+          if (!keywordPostLikeButton) {
+            console.log("Keyword post like button not found");
+          } else {
+            console.log("Keyword post like button found, clicking");
+            (keywordPostLikeButton as HTMLElement).click();
+          }
+
+          await sleep(1500);
 
           // press the escape key
           document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
-          await new Promise((resolve) => setTimeout(resolve, 3000));
+          await sleep(3000);
         }
       }
     }
   }
 
-  await new Promise((resolve) => setTimeout(resolve, 5000));
+  await sleep(5000);
 
   // reopen reels
-  const reelsButton = document.querySelector('svg[aria-label="Reels"]');
+  const reelsIcon = document.querySelector('svg[aria-label="Reels"]');
 
-  if (!reelsButton) {
+  if (!reelsIcon) {
     console.log("Reels button not found");
     return false;
   }
 
-  (reelsButton as HTMLElement).click();
-  await new Promise((resolve) => setTimeout(resolve, 5000));
+  const reelsButton =
+    reelsIcon.closest('button, [role="button"]') ||
+    reelsIcon.parentElement ||
+    reelsIcon;
+
+  (reelsButton as Element).dispatchEvent(
+    new MouseEvent("click", { bubbles: true, cancelable: true })
+  );
+  await sleep(5000);
 
   return true;
 }

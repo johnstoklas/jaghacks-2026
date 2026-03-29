@@ -1,7 +1,7 @@
-const sendToContent = (tabId, action, data = {}) => {
-  return new Promise((resolve, reject) => {
-    if (!tabId) return reject("No tabId");
+const NO_RECEIVER_ERROR = "Could not establish connection. Receiving end does not exist.";
 
+const sendMessageToTab = (tabId, action, data = {}) => {
+  return new Promise((resolve, reject) => {
     chrome.tabs.sendMessage(tabId, { action, data }, (response) => {
       if (chrome.runtime.lastError) {
         reject(chrome.runtime.lastError.message);
@@ -10,6 +10,41 @@ const sendToContent = (tabId, action, data = {}) => {
       }
     });
   });
+};
+
+const injectContentScript = (tabId) => {
+  return new Promise((resolve, reject) => {
+    chrome.scripting.executeScript(
+      {
+        target: { tabId },
+        files: ["content.js"],
+      },
+      () => {
+        if (chrome.runtime.lastError) {
+          reject(chrome.runtime.lastError.message);
+          return;
+        }
+
+        resolve(true);
+      }
+    );
+  });
+};
+
+const sendToContent = async (tabId, action, data = {}) => {
+  if (!tabId) throw new Error("No tabId");
+
+  try {
+    return await sendMessageToTab(tabId, action, data);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    const noReceiver = message.includes(NO_RECEIVER_ERROR);
+
+    if (!noReceiver) throw error;
+
+    await injectContentScript(tabId);
+    return sendMessageToTab(tabId, action, data);
+  }
 };
 
 export const handleLikePost = (tabId) => {

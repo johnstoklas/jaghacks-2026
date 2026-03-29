@@ -1,4 +1,4 @@
-import { scrollToNextReel, likeCurrentPost, openComments } from "./actions";
+import { scrollToNextReel, likeCurrentPost, openComments, openAndSearchKeywords } from "./actions";
 console.log("content script injected");
 
 type ReelEdge = Record<string, unknown>;
@@ -77,6 +77,22 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     sendResponse({ success, action: "openComments" });
   }
 
+  if (message.action === "openAndSearchKeywords") {
+    void openAndSearchKeywords(message.data?.keywords || [])
+      .then((success) => {
+        sendResponse({ success, action: "openAndSearchKeywords" });
+      })
+      .catch((error) => {
+        sendResponse({
+          success: false,
+          action: "openAndSearchKeywords",
+          error: error instanceof Error ? error.message : String(error),
+        });
+      });
+
+    return true;
+  }
+
   if (message.action === "reelData") {
     console.log("Received reel data from background:", message.data);
   }
@@ -84,7 +100,6 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (message.action === "reelShouldWatch") {
     console.log("Received reel should watch from background:", message.data.ai_summary);
   }
-
 
   return true;
 });

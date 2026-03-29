@@ -19,7 +19,11 @@ type RunStep = {
   status: StepStatus;
 };
 
-export default function ScraperPage() {
+interface ScraperPageInterface {
+  hashtags: string[];
+}
+
+export default function ScraperPage({ hashtags }: ScraperPageInterface) {
   const [showUpcomingModal, setShowUpcomingModal] = useState(false);
 
   const [topics] = useState<TopicStat[]>([
@@ -51,30 +55,40 @@ export default function ScraperPage() {
   };
 
   useEffect(() => {
-    console.log("Starting keyword search for");
-    const keywords = topics.map((topic) => topic.label).filter(Boolean);
-    console.log("Starting keyword search for ", keywords);
+    // console.log("Starting keyword search for");
+    // const keywords = topics.map((topic) => topic.label).filter(Boolean);
+    // console.log("Starting keyword search for ", keywords);
+    const searchHashtags = async() => {
+      const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
 
-    chrome.runtime.sendMessage(
-      { action: "openAndSearchKeywords", data: { keywords } },
-      (response) => {
-        if (chrome.runtime.lastError) {
-          console.error(
-            "Error triggering openAndSearchKeywords:",
-            chrome.runtime.lastError.message
-          );
-          return;
-        }
-
-        if (!response?.success) {
-          console.error(
-            "openAndSearchKeywords failed:",
-            response?.error || "Unknown error"
-          );
-        }
+      if (!tab?.id) {
+        console.error("No active website tab found");
+        return;
       }
-    );
-  }, [topics]);
+
+      chrome.runtime.sendMessage(
+        {
+          action: "openAndSearchKeywords",
+          data: {
+            tabId: tab.id,
+            keywords: hashtags,
+          },
+        },
+        (response) => {
+          if (chrome.runtime.lastError) {
+            console.error("Error:", chrome.runtime.lastError.message);
+            return;
+          }
+
+          if (!response?.success) {
+            console.error("openAndSearchKeywords failed:", response?.error);
+          }
+        }
+      );
+    };
+    
+    searchHashtags();
+  }, []);
 
   useEffect(() => {
     chrome.storage.local.get(["latestReelData"], (result) => {
