@@ -4,22 +4,17 @@ import { sendToBackground } from "../utils";
 
 interface HomePageInterface {
   setPage: React.Dispatch<React.SetStateAction<"home" | "scraper">>;
+  activeTabUrl: string;
 }
 
-const HomePage = ({ setPage }: HomePageInterface) => {
-  const [onInstagram, setOnInstagram] = useState(false);
+const HomePage = ({ setPage, activeTabUrl }: HomePageInterface) => {
+  const [onReels, setOnReels] = useState(false);
   const [items, setItems] = useState<string[]>([""]);
   const [alert, setAlert] = useState<string | null>(null);
 
   useEffect(() => {
-    chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-      const url: string = tabs[0]?.url || "";
-      console.log(url);
-      if (url.includes("instagram.com")) {
-        setOnInstagram(true);
-      }
-    });
-  }, []);
+    setOnReels(activeTabUrl.includes("instagram.com/reels"));
+  }, [activeTabUrl]);
 
   const handleItemChange = (index: number, value: string) => {
     setItems((prev) => {
@@ -30,7 +25,7 @@ const HomePage = ({ setPage }: HomePageInterface) => {
   };
 
   const handleAdd = () => {
-    if(!onInstagram) {
+    if(!onReels) {
       setAlert("Please open Instagram first.");
       return;
     }
@@ -38,14 +33,12 @@ const HomePage = ({ setPage }: HomePageInterface) => {
   };
 
   const handleRemove = (index: number) => {
-    setItems((prev) => {
-      if (prev.length === 1) return prev;
-      return prev.filter((_, i) => i !== index);
-    });
+    if (index === 0) return;
+    setItems((prev) => prev.filter((_, i) => i !== index));
   };
 
   const handleClick = async () => {
-    if (onInstagram) {
+    if (onReels) {
       const cleanedItems = items
         .map((item) => item.trim())
         .filter((item) => item.length > 0);
@@ -75,7 +68,6 @@ const HomePage = ({ setPage }: HomePageInterface) => {
     <>
       {alert && <Alert message={alert} onClose={() => setAlert(null)} />}
 
-    <div className="flex w-full flex-col items-start text-left">
       <h1
         className="
           text-4xl font-bold mb-6 tracking-tight shrink-0
@@ -85,12 +77,6 @@ const HomePage = ({ setPage }: HomePageInterface) => {
       >
         ReelDaddy
       </h1>
-
-      <p className="text-sm text-gray-500 mb-4">
-        Add topics you want to see more of on Instagram Reels.
-        We will use these topics to personalize your Instagram Reels feed.
-      </p>
-    </div>
 
       <div className="flex-1 min-h-0 flex flex-col">
         <div className="flex-1 min-h-0 overflow-y-auto pr-1 space-y-3">
@@ -114,21 +100,39 @@ const HomePage = ({ setPage }: HomePageInterface) => {
               />
 
               <button
-                onClick={index === items.length - 1 ? handleAdd : () => handleRemove(index)}
+                onClick={() => handleRemove(index)}
+                disabled={index === 0}
                 className={`
                   px-4 py-3 rounded-2xl text-sm font-semibold transition-all
                   ${
-                    index === items.length - 1
-                      ? "bg-white border border-pink-200 text-pink-500 hover:bg-pink-50 active:scale-95"
+                    index === 0
+                      ? "bg-gray-100 text-gray-400 cursor-not-allowed"
                       : "bg-red-100 text-red-600 hover:bg-red-200 active:scale-95"
                   }
                 `}
               >
-                {index === items.length - 1 ? "Add" : "Remove"}
+                Remove
               </button>
             </div>
           ))}
         </div>
+
+        <button
+          onClick={handleAdd}
+          className="
+            mt-4 w-full py-3
+            rounded-2xl
+            bg-white border border-pink-200 text-pink-500
+            text-base font-semibold
+            hover:bg-pink-50
+            active:scale-95
+            transition-all
+            shadow-sm
+            shrink-0
+          "
+        >
+          Add
+        </button>
       </div>
 
       <button
@@ -146,7 +150,7 @@ const HomePage = ({ setPage }: HomePageInterface) => {
           shrink-0
         "
       >
-        {onInstagram ? "Begin Scrolling" : "Open Instagram"}
+        {onReels ? "Begin" : "Open Instagram"}
       </button>
     </>
   );
