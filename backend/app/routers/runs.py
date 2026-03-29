@@ -15,7 +15,7 @@ from app.schemas.runs import RunCreate, RunCreated, RunOut, RunUpdate, SavedReel
 from app.services.keyword_expand import (
     expand_seeds_gemini,
     expand_seeds_vertex,
-    normalize_seeds_for_expansion,
+    seeds_from_topics,
 )
 from app.routers.summarize import _read_upload_to_temp, _suffix_from_filename
 from app.services.reel_storage import guess_media_type, persist_matched_reel_copy, resolve_stored_video_file
@@ -42,10 +42,14 @@ def list_runs(db: Db) -> list[Run]:
 
 def _run_to_created(run: Run) -> RunCreated:
     raw = run.keyword_expansion
-    groups: list[SeedKeywordGroup] | None = None
+    topics_map: dict[str, list[str]] = {}
     if raw:
-        groups = [SeedKeywordGroup(**row) for row in raw]
-    return RunCreated(id=run.id, keyword_expansion=groups)
+        for row in raw:
+            seed = row.get("seed")
+            kws = row.get("keywords")
+            if isinstance(seed, str) and isinstance(kws, list):
+                topics_map[seed] = [str(x) for x in kws]
+    return RunCreated(id=run.id, topics=topics_map)
 
 
 @router.post("", response_model=RunCreated, status_code=status.HTTP_201_CREATED)
@@ -56,7 +60,7 @@ def create_run(
 ) -> RunCreated:
     name = body.name.strip()
     topics = body.topics.strip()
-    seeds = normalize_seeds_for_expansion(body.seed_words, topics)
+    seeds = seeds_from_topics(topics)
     kw: list | None = None
     if seeds:
         if settings.vertex_configured:
