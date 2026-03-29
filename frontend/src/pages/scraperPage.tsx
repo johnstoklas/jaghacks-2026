@@ -403,15 +403,15 @@ export default function ScraperPage({ items }: ScraperPageProps) {
                   key={shortcode}
                   className="flex items-center justify-between gap-3 rounded-xl border border-pink-100 bg-gradient-to-r from-white to-pink-50 px-3 py-3"
                 >
-                  <div className="flex-1 min-w-0">
+                  <div className="flex-1 min-w-0 text-left">
                     <p className="text-sm font-medium text-gray-800 truncate">
                       {getReelTitle(reel)}
                     </p>
                     <p className="text-xs text-gray-500 mt-1">
                       {reel.approved === true
-                        ? "Included in algorithm"
+                        ? "Approved"
                         : reel.approved === false
-                        ? "Excluded from algorithm"
+                        ? "Skipped"
                         : "Not reviewed yet"}
                     </p>
                   </div>

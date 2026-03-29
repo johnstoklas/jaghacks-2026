@@ -77,13 +77,18 @@ const HomePage = ({ setPage, setRunItems }: HomePageInterface) => {
 
       <h1
         className="
-          text-4xl font-bold mb-6 tracking-tight shrink-0
+          text-4xl font-bold mb-6 tracking-tight shrink-0 text-left w-full
           bg-gradient-to-r from-[#833AB4] via-[#FD1D1D] to-[#FCAF45]
           bg-clip-text text-transparent
         "
       >
-        ReelDaddy
+        ReeLearner
       </h1>
+
+      <p className="mb-4 text-left text-gray-700 w-full">
+        Add topics to analyze in the Instagram Reels algorithm.
+        We will watch or skip reels based on these topics.
+      </p>
 
       <div className="flex-1 min-h-0 flex flex-col">
         <div className="flex-1 min-h-0 overflow-y-auto pr-1 space-y-3">
