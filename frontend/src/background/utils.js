@@ -86,13 +86,19 @@ function extractMedia(postInfo) {
 }
 
 async function uploadVideoAndGetAISummary(file) {
-  console.log('are we getting here')
   const formData = new FormData();
   formData.append('video', file);
-  for (const [key, value] of formData.entries()) {
-    console.log(key, value);
-  }
-  const response = await fetch('http://localhost:8080/api/upload-and-summarize-vertex', {
+
+    const result = await chrome.storage.local.get(["runId"]);
+    const run_id = result.runId;
+
+    console.log("run id", run_id);
+
+    if (!run_id) {
+      throw new Error("No runId found in storage");
+    }
+
+  const response = await fetch(`http://localhost:8080/api/runs/${run_id}/upload-and-match-vertex`, {
     method: 'POST',
     body: formData,
   });
@@ -102,6 +108,7 @@ async function uploadVideoAndGetAISummary(file) {
   }
 
   const data = await response.json();
+  console.log(data)
   return data.summary;
 }
 

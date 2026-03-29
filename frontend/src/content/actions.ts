@@ -46,3 +46,26 @@ export function openComments() {
   (commentButton as HTMLElement).click();
   return true;
 }
+
+export function getCurrentCaption() {
+  try {
+    const containers = Array.from(document.querySelectorAll('div[role="presentation"]'));
+
+    for (const container of containers) {
+      const spans = Array.from(container.querySelectorAll("span"));
+      const texts = spans
+        .map((span) => span.innerText?.trim())
+        .filter(Boolean)
+        .filter((text) => text.toLowerCase() !== "more");
+
+      if (texts.length > 0) {
+        return texts[0];
+      }
+    }
+
+    return null;
+  } catch (err) {
+    console.error("Error getting caption:", err);
+    return null;
+  }
+}

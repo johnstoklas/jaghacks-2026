@@ -7,9 +7,13 @@ type TopicStat = {
 };
 
 type ReelItem = {
-  id: number;
-  title: string;
-  approved: boolean | null;
+  shortcode: string;
+  video_duration: number | null;
+  caption: string | null;
+  thumbnail_url: string | null;
+  ai_summary: string | null;
+  status: "loading" | "done" | "error";
+  match?: boolean | null;
 };
 
 type StepStatus = "done" | "active" | "pending";
@@ -21,6 +25,12 @@ type RunStep = {
 
 export default function ScraperPage() {
   const [showUpcomingModal, setShowUpcomingModal] = useState(false);
+  const [reels, setReels] = useState<ReelItem[]>([]);
+  const [currentUrl, setCurrentUrl] = useState<string | null>(null);
+  const [currentCaption, setCurrentCaption] = useState<string | null>(null);
+  const [currentBatchReel, setCurrentBatchReel] = useState<ReelItem | null>(null);
+  const [processedReels, setProcessedReels] = useState<Set<string>>(new Set());
+  const [isProcessing, setIsProcessing] = useState(false);
 
   const [topics] = useState<TopicStat[]>([
     { label: "dogs", percent: 20 },
@@ -28,20 +38,126 @@ export default function ScraperPage() {
     { label: "other", percent: 40 },
   ]);
 
-  const [reels, setReels] = useState<ReelItem[]>([]);
-
-  const [steps] = useState<RunStep[]>([
-    { label: "Analyzing reel", status: "done" },
-    { label: "Liking reel", status: "done" },
-    { label: "Opening comments", status: "active" },
+  const [steps, setSteps] = useState<RunStep[]>([
+    { label: "Analyzing reel", status: "pending" },
+    { label: "Liking reel", status: "pending" },
+    { label: "Opening comments", status: "pending" },
     { label: "Updating algorithm", status: "pending" },
   ]);
 
-  // const markReel = (id: number, approved: boolean) => {
-  //   setUpcomingReels((prev) =>
-  //     prev.map((reel) => (reel.id === id ? { ...reel, approved } : reel))
-  //   );
-  // };
+  const updateStepStatus = (label: string, status: StepStatus) => {
+    setSteps((prev) =>
+      prev.map((step) =>
+        step.label === label ? { ...step, status } : step
+      )
+    );
+  };
+
+  const resetSteps = () => {
+    setSteps([
+      { label: "Analyzing reel", status: "pending" },
+      { label: "Liking reel", status: "pending" },
+      { label: "Opening comments", status: "pending" },
+      { label: "Updating algorithm", status: "pending" },
+    ]);
+  };
+
+  const sleep = (ms: number) => new Promise((res) => setTimeout(res, ms));
+
+  const sendMessageAsync = (message: any) => {
+    return new Promise<any>((resolve, reject) => {
+      chrome.runtime.sendMessage(message, (response) => {
+        if (chrome.runtime.lastError) {
+          reject(chrome.runtime.lastError);
+        } else {
+          resolve(response);
+        }
+      });
+    });
+  };
+
+  const getActiveTab = async (): Promise<chrome.tabs.Tab | null> => {
+    return new Promise((resolve) => {
+      chrome.tabs.query({ active: true, lastFocusedWindow: true }, (tabs) => {
+        resolve(tabs[0] ?? null);
+      });
+    });
+  };
+
+  const getActiveTabUrl = async (): Promise<string | null> => {
+    const tab = await getActiveTab();
+    return tab?.url ?? null;
+  };
+
+  const refreshCurrentUrl = async () => {
+    const url = await getActiveTabUrl();
+    setCurrentUrl(url);
+    return url;
+  };
+
+  const scrollNTimes = async (n: number = 1) => {
+    for (let i = 0; i < n; i++) {
+      try {
+        await sendMessageAsync({ action: "scrollReel" });
+        console.log(`Scroll ${i + 1} complete`);
+        await sleep(1200);
+        await refreshCurrentUrl();
+      } catch (error) {
+        console.error(`Scroll ${i + 1} failed`, error);
+        break;
+      }
+    }
+  };
+
+  const normalizeCaption = (caption: string | null | undefined) => {
+    return (caption ?? "").trim().toLowerCase();
+  };
+
+  const captionsMatch = (
+    a: string | null | undefined,
+    b: string | null | undefined
+  ) => {
+    const aa = normalizeCaption(a);
+    const bb = normalizeCaption(b);
+
+    if (!aa || !bb) return false;
+
+    if (aa === bb) return true;
+
+    return aa.includes(bb) || bb.includes(aa);
+  };
+
+  const getCurrentVideoCaption = async (): Promise<string | null> => {
+    try {
+      const response = await sendMessageAsync({ action: "getCurrentCaption" });
+      return response?.caption ?? null;
+    } catch (error) {
+      console.error("Failed to get current caption:", error);
+      return null;
+    }
+  };
+
+  const getLatestReelsFromStorage = async (): Promise<ReelItem[]> => {
+    return new Promise((resolve) => {
+      chrome.storage.local.get(["latestReelData"], (result) => {
+        const reelsObject = result.latestReelData || {};
+        resolve(Object.values(reelsObject) as ReelItem[]);
+      });
+    });
+  };
+
+  const findMatchingBatchReelByCaption = (
+    batch: ReelItem[],
+    caption: string | null
+  ): ReelItem | null => {
+    if (!caption) return null;
+
+    return batch.find((reel) => captionsMatch(reel.caption, caption)) ?? null;
+  };
+
+  const getProcessedKey = (reel: ReelItem) => {
+    return reel.shortcode || normalizeCaption(reel.caption);
+  };
 
   const handleStop = () => {
     chrome.runtime.sendMessage({ action: "stopRun" }, (response) => {
@@ -53,29 +169,171 @@ export default function ScraperPage() {
     });
   };
 
+  const handleMatchTrue = async (reel: ReelItem) => {
+    console.log("Match is true for reel:", reel);
+
+    updateStepStatus("Analyzing reel", "done");
+    await sleep(500);
+
+    updateStepStatus("Liking reel", "active");
+    await sendMessageAsync({ action: "likePost" });
+    updateStepStatus("Liking reel", "done");
+    await sleep(500);
+
+    updateStepStatus("Opening comments", "active");
+    await sendMessageAsync({ action: "openComments" });
+    updateStepStatus("Opening comments", "done");
+    await sleep(1000);
+
+    updateStepStatus("Updating algorithm", "active");
+    updateStepStatus("Updating algorithm", "done");
+    await sleep(500);
+  };
+
+  const handleMatchFalse = async (reel: ReelItem) => {
+    console.log("Match is false for reel:", reel);
+
+    updateStepStatus("Analyzing reel", "done");
+    await sleep(300);
+  };
+
+  // Initial URL load
+  useEffect(() => {
+    refreshCurrentUrl();
+  }, []);
+
+  // Load reels from storage on mount
   useEffect(() => {
     chrome.storage.local.get(["latestReelData"], (result) => {
       const reelsObject = result.latestReelData || {};
-      setReels(Object.values(reelsObject));
+      setReels(Object.values(reelsObject) as ReelItem[]);
     });
   }, []);
 
+  // Listen for reel updates in storage
   useEffect(() => {
     const listener = (changes: any, areaName: string) => {
       if (areaName === "local" && changes.latestReelData) {
-        setReels(changes.latestReelData.newValue || {});
+        const updatedObject = changes.latestReelData.newValue || {};
+        setReels(Object.values(updatedObject) as ReelItem[]);
       }
     };
 
     chrome.storage.onChanged.addListener(listener);
-
     return () => chrome.storage.onChanged.removeListener(listener);
   }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const processLoop = async () => {
+      if (isProcessing) return;
+
+      setIsProcessing(true);
+
+      try {
+        while (!cancelled) {
+          await refreshCurrentUrl();
+
+          const latestReels = await getLatestReelsFromStorage();
+          setReels(latestReels);
+          console.log("Latest batch:", latestReels);
+
+          // Step 1: if there is no batch, scroll
+          if (!latestReels.length) {
+            console.log("No batch found, scrolling...");
+            setCurrentBatchReel(null);
+            setCurrentCaption(null);
+            resetSteps();
+            await scrollNTimes(1);
+            await sleep(1500);
+            continue;
+          }
+
+          // Step 2: get current caption
+          const caption = await getCurrentVideoCaption();
+          setCurrentCaption(caption);
+          console.log("Current caption:", caption);
+
+          // Step 3: if no caption, scroll
+          if (!caption) {
+            console.log("No caption found for current reel, scrolling...");
+            setCurrentBatchReel(null);
+            resetSteps();
+            await scrollNTimes(1);
+            await sleep(1500);
+            continue;
+          }
+
+          // Step 4: check if caption exists in batch
+          const matchedReel = findMatchingBatchReelByCaption(reels, caption);
+          setCurrentBatchReel(matchedReel);
+          console.log("Matched reel from batch:", matchedReel);
+
+          // Step 5: if not in batch, scroll
+          if (!matchedReel) {
+            console.log("Caption not found in batch, scrolling...");
+            resetSteps();
+            await scrollNTimes(1);
+            await sleep(1500);
+            continue;
+          }
+
+          const processedKey = getProcessedKey(matchedReel);
+
+          // Skip if already processed
+          if (processedReels.has(processedKey)) {
+            console.log("Already processed this reel, scrolling...");
+            await scrollNTimes(1);
+            await sleep(1500);
+            continue;
+          }
+
+          resetSteps();
+          updateStepStatus("Analyzing reel", "active");
+          await sleep(300);
+
+          // Step 6: if in batch, check match value
+          if (matchedReel.match === true) {
+            await handleMatchTrue(matchedReel);
+          } else if (matchedReel.match === false) {
+            await handleMatchFalse(matchedReel);
+          } else {
+            console.log("Matched reel found, but match is still null/undefined. Waiting...");
+            await sleep(1200);
+            continue;
+          }
+
+          // Mark as processed
+          setProcessedReels((prev) => {
+            const next = new Set(prev);
+            next.add(processedKey);
+            return next;
+          });
+
+          // Step 7: after handling true/false, scroll
+          await scrollNTimes(1);
+          await sleep(1500);
+        }
+      } catch (error) {
+        console.error("Processing loop failed:", error);
+      } finally {
+        if (!cancelled) {
+          setIsProcessing(false);
+        }
+      }
+    };
+
+    processLoop();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [processedReels, isProcessing]);
 
   return (
     <>
       <div>
-        {/* Algorithm Progress */}
         <section className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-sm border border-pink-100 p-4">
           <h2
             className="
@@ -105,24 +363,16 @@ export default function ScraperPage() {
           </div>
         </section>
 
-        {/* Current Reel */}
         <section className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-sm border border-pink-100 p-4 mt-4">
-          <h2
-            className="
-              text-sm font-semibold mb-3
-              bg-gradient-to-r from-[#833AB4] via-[#FD1D1D] to-[#FCAF45]
-              bg-clip-text text-transparent
-            "
-          >
-            Current Reel
-          </h2>
-
           <div className="rounded-xl bg-gradient-to-r from-pink-50 via-orange-50 to-purple-50 border border-pink-100 p-3 mb-3">
             <p className="text-sm font-medium text-gray-800">
               Currently processing:
             </p>
             <p className="text-sm text-gray-600 mt-1">
-              {reels[1]?.title || "Loading..."}
+              {currentBatchReel?.caption ||
+                currentCaption ||
+                currentUrl ||
+                (isProcessing ? "Processing..." : "Loading...")}
             </p>
           </div>
 
@@ -156,20 +406,8 @@ export default function ScraperPage() {
           </div>
         </section>
 
-        {/* Bottom controls */}
         <div className="absolute bottom-0 left-0 w-full p-3 bg-white/95 backdrop-blur-sm border-t border-pink-100">
           <div className="flex gap-3">
-            {/* <button
-              onClick={() => setShowUpcomingModal(true)}
-              className="
-                flex-1 py-3 rounded-2xl bg-white font-semibold
-                border border-pink-200 text-pink-500
-                shadow-sm hover:bg-pink-50 transition
-              "
-            >
-              Upcoming
-            </button> */}
-
             <button
               onClick={handleStop}
               className="
@@ -185,7 +423,6 @@ export default function ScraperPage() {
         </div>
       </div>
 
-      {/* Upcoming Reels Modal */}
       {showUpcomingModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
           <div className="w-full max-w-sm rounded-3xl bg-white shadow-2xl border border-pink-100 p-4">
@@ -210,52 +447,6 @@ export default function ScraperPage() {
                 Close
               </button>
             </div>
-
-            {/* <div className="space-y-3 max-h-[420px] overflow-y-auto pr-1">
-              {upcomingReels.map((reel) => (
-                <div
-                  key={reel.id}
-                  className="flex items-center justify-between gap-3 rounded-xl border border-pink-100 bg-gradient-to-r from-white to-pink-50 px-3 py-3"
-                >
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-gray-800 truncate">
-                      {reel.title}
-                    </p>
-                    <p className="text-xs text-gray-500 mt-1">
-                      {reel.approved === true
-                        ? "Included in algorithm"
-                        : reel.approved === false
-                        ? "Excluded from algorithm"
-                        : "Not reviewed yet"}
-                    </p>
-                  </div>
-
-                  <div className="flex items-center gap-2 shrink-0">
-                    <button
-                      onClick={() => markReel(reel.id, false)}
-                      className={`p-2 rounded-full border transition ${
-                        reel.approved === false
-                          ? "bg-red-100 border-red-200 text-red-600"
-                          : "bg-white border-pink-100 text-gray-500 hover:bg-pink-50"
-                      }`}
-                    >
-                      <X size={16} />
-                    </button>
-
-                    <button
-                      onClick={() => markReel(reel.id, true)}
-                      className={`p-2 rounded-full border transition ${
-                        reel.approved === true
-                          ? "bg-pink-100 border-pink-200 text-pink-600"
-                          : "bg-white border-pink-100 text-gray-500 hover:bg-pink-50"
-                      }`}
-                    >
-                      <Heart size={16} />
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div> */}
           </div>
         </div>
       )}

@@ -1,4 +1,4 @@
-import { scrollToNextReel, likeCurrentPost, openComments } from "./actions";
+import { scrollToNextReel, likeCurrentPost, openComments, getCurrentCaption } from "./actions";
 console.log("content script injected");
 
 type ReelEdge = Record<string, unknown>;
@@ -75,6 +75,11 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (message.action === "openComments") {
     const success = openComments();
     sendResponse({ success, action: "openComments" });
+  }
+
+  if (message.action === "getCurrentCaption") {
+    const caption = getCurrentCaption();
+    sendResponse({ caption, action: "getCurrentCaption" });
   }
 
   if (message.action === "reelData") {

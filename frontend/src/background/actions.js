@@ -23,3 +23,7 @@ export const handleScrollReel = (tabId) => {
 export const handleOpenComments = (tabId) => {
   return sendToContent(tabId, "openComments");
 };
+
+export const handleGetCurrentCaption = (tabId) => {
+  return sendToContent(tabId, "getCurrentCaption");
+};

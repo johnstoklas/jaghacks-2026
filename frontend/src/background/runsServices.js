@@ -18,6 +18,10 @@ export const handleCreateRun = async (items) => {
     }
 
     const data = await response.json();
+    const { id: runId } = data;
+    chrome.storage.local.set({ runId }, () => {
+      console.log("Saved runId:", runId);
+    });
     return data;
   } catch (error) {
     console.error("Failed to send items:", error);

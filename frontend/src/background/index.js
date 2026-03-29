@@ -1,5 +1,5 @@
 import { processReelBatch } from './utils.js';
-import { handleLikePost, handleScrollReel, handleOpenComments } from './actions.js';
+import { handleLikePost, handleScrollReel, handleOpenComments, handleGetCurrentCaption } from './actions.js';
 import { handleCreateRun } from './runsServices.js';
 
 console.log("background script loaded");
@@ -41,6 +41,15 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
           await handleOpenComments(tabId);
           sendResponse({ success: true });
+          break;
+        }
+
+        case "getCurrentCaption": {
+          const tabId = await getActiveTabId();
+          if (!tabId) throw new Error("No active tab found");
+
+          const caption = await handleGetCurrentCaption(tabId);
+          sendResponse({ success: true, caption });
           break;
         }
 
