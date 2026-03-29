@@ -135,6 +135,31 @@ async function sendMessageToActiveTab(payload) {
   }
 }
 
+async function broadcastReelData(reelData) {
+  try {
+    const stored = await chrome.storage.local.get(['reelFeed']);
+    const reelFeed = Array.isArray(stored?.reelFeed) ? stored.reelFeed : [];
+    const nextFeed = [reelData, ...reelFeed].slice(0, 50);
+
+    await chrome.storage.local.set({
+      latestReelData: reelData,
+      reelFeed: nextFeed,
+    });
+  } catch (error) {
+    console.error('Failed to cache reel data in storage', error);
+  }
+
+  try {
+    await chrome.runtime.sendMessage({
+      action: 'reelData',
+      data: reelData,
+    });
+  } catch (error) {
+    // Popup may be closed when this runs.
+    console.debug('Unable to broadcast reelData to extension contexts:', error);
+  }
+}
+
 async function processReel(reel, authContext){
   const reelMedia = reel?.node?.media;
   const shortcode = reelMedia?.code;
@@ -145,23 +170,17 @@ async function processReel(reel, authContext){
     thumbnail_url: reelMedia.image_versions2?.candidates?.[0]?.url || null
   }
 
-  await sendMessageToActiveTab({
-    action: "reelData",
-    data: {
-      reelData,
-      authContext: authContext,
-    },
-  });
 
   const ai_summary = await uploadToAPIAndSummarize(reelMedia, authContext);  
 
+  reelData.ai_summary = ai_summary;
+  reelData.shouldWatch = true;
+
+  await broadcastReelData(reelData);
+
   await sendMessageToActiveTab({
-    action: "reelShouldWatch",
-    data: {
-      ai_summary: ai_summary,
-      shouldWatch: true,
-      authContext: authContext,
-    },
+    action: "reelData",
+    data: reelData,
   });
 
   console.log("Finished processing reel:", reel);

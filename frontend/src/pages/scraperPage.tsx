@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Check, Heart, X, Loader2, Square } from "lucide-react";
 
 type TopicStat = {
@@ -6,10 +6,13 @@ type TopicStat = {
   percent: number;
 };
 
-type ReelItem = {
-  id: number;
-  title: string;
-  approved: boolean | null;
+type ReelData = {
+  shortcode?: string;
+  video_duration?: number | null;
+  caption?: string | null;
+  thumbnail_url?: string | null;
+  ai_summary?: string | null;
+  approved?: boolean | null;
 };
 
 type StepStatus = "done" | "active" | "pending";
@@ -21,6 +24,7 @@ type RunStep = {
 
 export default function ScraperPage() {
   const [showUpcomingModal, setShowUpcomingModal] = useState(false);
+  const [currentReel, setCurrentReel] = useState<ReelData | null>(null);
 
   const [topics] = useState<TopicStat[]>([
     { label: "dogs", percent: 20 },
@@ -28,12 +32,7 @@ export default function ScraperPage() {
     { label: "other", percent: 40 },
   ]);
 
-  const [upcomingReels, setUpcomingReels] = useState<ReelItem[]>([
-    { id: 1, title: "Golden retriever playing in snow", approved: true },
-    { id: 2, title: "Cat jumping onto kitchen counter", approved: null },
-    { id: 3, title: "Random meme edit", approved: false },
-    { id: 4, title: "Puppy training reel", approved: null },
-  ]);
+  const [upcomingReels, setUpcomingReels] = useState<ReelData[]>([]);
 
   const [steps] = useState<RunStep[]>([
     { label: "Analyzing reel", status: "done" },
@@ -42,11 +41,66 @@ export default function ScraperPage() {
     { label: "Updating algorithm", status: "pending" },
   ]);
 
-  const markReel = (id: number, approved: boolean) => {
-    setUpcomingReels((prev) =>
-      prev.map((reel) => (reel.id === id ? { ...reel, approved } : reel))
+  const getReelKey = (reel: ReelData, index = 0): string => {
+    return (
+      reel.shortcode ||
+      reel.thumbnail_url ||
+      `${reel.caption || reel.ai_summary || "reel"}-${reel.video_duration || 0}-${index}`
     );
   };
+
+  const getReelTitle = (reel: ReelData): string => {
+    return reel.caption?.trim() || reel.ai_summary?.trim() || "Untitled reel";
+  };
+
+  const markReel = (key: string, approved: boolean) => {
+    setUpcomingReels((prev) =>
+      prev.map((reel, index) =>
+        getReelKey(reel, index) === key ? { ...reel, approved } : reel
+      )
+    );
+  };
+
+  useEffect(() => {
+    chrome.storage.local.get(["latestReelData", "reelFeed"], (stored) => {
+      const latest = stored?.latestReelData as ReelData | undefined;
+      const feed = Array.isArray(stored?.reelFeed)
+        ? (stored.reelFeed as ReelData[])
+        : [];
+
+      if (latest) {
+        setCurrentReel(latest);
+      }
+
+      if (feed.length > 0) {
+        setUpcomingReels(feed.map((reel) => ({ ...reel, approved: reel.approved ?? null })));
+      }
+    });
+
+    const handleRuntimeMessage = (
+      message: { action?: string; data?: ReelData },
+      _sender: chrome.runtime.MessageSender,
+      _sendResponse: (response?: unknown) => void
+    ) => {
+      if (message.action !== "reelData" || !message.data) return;
+
+      const nextReel = message.data;
+      setCurrentReel(nextReel);
+      setUpcomingReels((prev) => {
+        const normalized = { ...nextReel, approved: nextReel.approved ?? null };
+        const nextKey = getReelKey(normalized);
+        return [
+          normalized,
+          ...prev.filter((item, index) => getReelKey(item, index) !== nextKey),
+        ].slice(0, 50);
+      });
+    };
+
+    chrome.runtime.onMessage.addListener(handleRuntimeMessage);
+    return () => {
+      chrome.runtime.onMessage.removeListener(handleRuntimeMessage);
+    };
+  }, []);
 
   const handleStop = () => {
     chrome.runtime.sendMessage({ action: "stopRun" }, (response) => {
@@ -108,7 +162,7 @@ export default function ScraperPage() {
               Currently processing:
             </p>
             <p className="text-sm text-gray-600 mt-1">
-              “Funny dog learning tricks”
+              {currentReel?.caption || currentReel?.ai_summary || "Waiting for first reel..."}
             </p>
           </div>
 
@@ -200,12 +254,12 @@ export default function ScraperPage() {
             <div className="space-y-3 max-h-[420px] overflow-y-auto pr-1">
               {upcomingReels.map((reel) => (
                 <div
-                  key={reel.id}
+                  key={getReelKey(reel)}
                   className="flex items-center justify-between gap-3 rounded-xl border border-pink-100 bg-gradient-to-r from-white to-pink-50 px-3 py-3"
                 >
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium text-gray-800 truncate">
-                      {reel.title}
+                      {getReelTitle(reel)}
                     </p>
                     <p className="text-xs text-gray-500 mt-1">
                       {reel.approved === true
@@ -218,7 +272,7 @@ export default function ScraperPage() {
 
                   <div className="flex items-center gap-2 shrink-0">
                     <button
-                      onClick={() => markReel(reel.id, false)}
+                      onClick={() => markReel(getReelKey(reel), false)}
                       className={`p-2 rounded-full border transition ${
                         reel.approved === false
                           ? "bg-red-100 border-red-200 text-red-600"
@@ -229,7 +283,7 @@ export default function ScraperPage() {
                     </button>
 
                     <button
-                      onClick={() => markReel(reel.id, true)}
+                      onClick={() => markReel(getReelKey(reel), true)}
                       className={`p-2 rounded-full border transition ${
                         reel.approved === true
                           ? "bg-pink-100 border-pink-200 text-pink-600"
