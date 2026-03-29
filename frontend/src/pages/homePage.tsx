@@ -4,17 +4,23 @@ import { sendToBackground } from "../utils";
 
 interface HomePageInterface {
   setPage: React.Dispatch<React.SetStateAction<"home" | "scraper">>;
-  activeTabUrl: string;
+  setRunItems: React.Dispatch<React.SetStateAction<string[]>>;
 }
 
-const HomePage = ({ setPage, activeTabUrl }: HomePageInterface) => {
+const HomePage = ({ setPage, setRunItems }: HomePageInterface) => {
   const [onReels, setOnReels] = useState(false);
   const [items, setItems] = useState<string[]>([""]);
   const [alert, setAlert] = useState<string | null>(null);
 
   useEffect(() => {
-    setOnReels(activeTabUrl.includes("instagram.com/reels"));
-  }, [activeTabUrl]);
+    chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+      const url: string = tabs[0]?.url || "";
+      console.log(url);
+      if (url.includes("instagram.com/reels")) {
+        setOnReels(true);
+      }
+    });
+  }, []);
 
   const handleItemChange = (index: number, value: string) => {
     setItems((prev) => {
@@ -49,6 +55,7 @@ const HomePage = ({ setPage, activeTabUrl }: HomePageInterface) => {
       }
 
       try {
+        setRunItems(cleanedItems);
         const response = await sendToBackground("createRun", {
           items: cleanedItems,
         });

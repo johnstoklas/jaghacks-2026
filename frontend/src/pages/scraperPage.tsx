@@ -6,6 +6,10 @@ type TopicStat = {
   percent: number;
 };
 
+type ScraperPageProps = {
+  items: string[];
+};
+
 type ReelData = {
   shortcode?: string;
   video_duration?: number | null;
@@ -23,7 +27,7 @@ type RunStep = {
   status: StepStatus;
 };
 
-export default function ScraperPage() {
+export default function ScraperPage({ items }: ScraperPageProps) {
   const DEFAULT_TIMER_SECONDS = 15;
 
   const [showUpcomingModal, setShowUpcomingModal] = useState(false);
@@ -31,11 +35,7 @@ export default function ScraperPage() {
   const [pageUrl, setPageUrl] = useState("");
   const [timer, setTimer] = useState(DEFAULT_TIMER_SECONDS);
 
-  const [topics] = useState<TopicStat[]>([
-    { label: "dogs", percent: 20 },
-    { label: "cats", percent: 40 },
-    { label: "other", percent: 40 },
-  ]);
+  const topics: TopicStat[] = items.map((item) => ({ label: item, percent: 100 }));
 
   const [upcomingReels, setUpcomingReels] = useState<Record<string, ReelData>>({});
 
