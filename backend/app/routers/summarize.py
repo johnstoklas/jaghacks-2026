@@ -12,6 +12,7 @@ from app.models import Run
 from app.schemas.runs import MatchOut
 from app.services.gemini_summarize import summarize_video_path
 from app.services.topic_match import match_summary_to_topics_gemini, match_summary_to_topics_vertex
+from app.services.reel_storage import persist_matched_reel_copy
 from app.services.vertex_summarize import summarize_video_gcs
 from app.services.video_compress import compress_video_path
 
@@ -235,7 +236,7 @@ async def upload_and_match(
     settings: Annotated[Settings, Depends(get_settings)],
     db: Db,
 ) -> MatchOut:
-    """Gemini: summarize reel, structured match vs parsed `Run.topics`. Persist video via `POST .../saved-reels`."""
+    """Gemini: summarize reel, structured match vs parsed `Run.topics`. On match, persists video to saved_reels."""
     if not settings.gemini_api_configured:
         raise HTTPException(
             status_code=503,
@@ -277,6 +278,16 @@ async def upload_and_match(
         except Exception as e:
             raise HTTPException(status_code=502, detail=f"Topic match failed: {e!s}") from e
 
+        if result.match:
+            persist_matched_reel_copy(
+                db,
+                run_id=run_id,
+                source_file=tmp_path,
+                reel_ref=None,
+                settings=settings,
+                file_suffix=_suffix_from_filename(video.filename),
+            )
+
         return MatchOut(match=result.match, topic_matches=result.topic_matches)
     finally:
         try:
@@ -295,7 +306,7 @@ async def upload_and_match_vertex(
     settings: Annotated[Settings, Depends(get_settings)],
     db: Db,
 ) -> MatchOut:
-    """Vertex: compress → GCS → summarize, structured match. Persist video via `POST .../saved-reels`."""
+    """Vertex: compress → GCS → summarize, structured match. On match, persists original upload to saved_reels."""
     if not settings.vertex_configured:
         raise HTTPException(
             status_code=503,
@@ -349,6 +360,16 @@ async def upload_and_match_vertex(
             raise HTTPException(status_code=502, detail=f"Topic match parse failed: {e!s}") from e
         except Exception as e:
             raise HTTPException(status_code=502, detail=f"Topic match failed: {e!s}") from e
+
+        if result.match:
+            persist_matched_reel_copy(
+                db,
+                run_id=run_id,
+                source_file=tmp_path,
+                reel_ref=None,
+                settings=settings,
+                file_suffix=_suffix_from_filename(video.filename),
+            )
 
         return MatchOut(match=result.match, topic_matches=result.topic_matches)
     finally:

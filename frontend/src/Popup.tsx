@@ -5,6 +5,7 @@ import ScraperPage from "./pages/scraperPage";
 export default function Popup() {
   const [page, setPage] = useState<"home" | "scraper">("home");
   const [hashtags, setHashtags] = useState<string[]>([]);
+  const [runItems, setRunItems] = useState<string[]>([]);
   
   return (
     <div className="w-[380px] max-w-md h-[600px] text-center p-6 flex flex-col relative">
@@ -14,6 +15,7 @@ export default function Popup() {
       />}
       {page === "scraper" && <ScraperPage 
         hashtags={hashtags}
+        items={runItems}
       />}
     </div>
   );

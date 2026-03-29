@@ -94,21 +94,8 @@ def _validate_expansion_rows(data: list[Any], expected_seeds: list[str]) -> list
     return out
 
 
-def normalize_seeds_for_expansion(body_seed_words: list[str] | None, topics: str) -> list[str]:
-    """Seeds for LLM: explicit seed_words if non-empty after normalize; else comma-split topics."""
-    if body_seed_words is not None:
-        out: list[str] = []
-        for s in body_seed_words:
-            t = (s or "").strip()
-            if not t:
-                continue
-            t = t[:MAX_SEED_LEN]
-            if t not in out:
-                out.append(t)
-            if len(out) >= MAX_SEEDS:
-                break
-        if out:
-            return out
+def seeds_from_topics(topics: str) -> list[str]:
+    """Seeds for LLM expansion: one seed per comma-separated topic label (capped)."""
     return parse_topics(topics)[:MAX_SEEDS]
 
 

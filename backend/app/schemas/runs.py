@@ -11,12 +11,11 @@ class SeedKeywordGroup(BaseModel):
 class RunCreate(BaseModel):
     name: str = Field(..., min_length=1, max_length=255)
     topics: str = Field(..., min_length=1)
-    seed_words: list[str] | None = Field(default=None, max_length=20)
 
 
 class RunCreated(BaseModel):
     id: int
-    keyword_expansion: list[SeedKeywordGroup] | None = None
+    topics: dict[str, list[str]] = Field(default_factory=dict)
 
 
 class RunUpdate(BaseModel):

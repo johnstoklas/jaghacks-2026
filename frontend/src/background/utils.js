@@ -1,6 +1,5 @@
 const IG_BASE_URL = 'https://www.instagram.com/';
 const IG_SHORTCODE_ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_';
-let latestReelData = {};
 
 function getFetchOptions(authContext = {}) {
   return {
@@ -86,13 +85,17 @@ function extractMedia(postInfo) {
 }
 
 async function uploadVideoAndGetAISummary(file) {
-  console.log('are we getting here')
   const formData = new FormData();
   formData.append('video', file);
-  for (const [key, value] of formData.entries()) {
-    console.log(key, value);
+
+  // access run from local storage and get the latest run ID
+  const stored = await chrome.storage.local.get(["latestRun"]);
+  const run_id = stored?.latestRun?.id;
+  if (!run_id) {
+    throw new Error("No active run found in local storage");
   }
-  const response = await fetch('http://localhost:8080/api/upload-and-summarize-vertex', {
+
+  const response = await fetch(`http://localhost:8080/runs/${run_id}/upload-and-match-vertex`, {
     method: 'POST',
     body: formData,
   });
@@ -139,53 +142,58 @@ async function sendMessageToActiveTab(payload) {
   }
 }
 
+async function broadcastReelData(reelData) {
+  try {
+    const stored = await chrome.storage.local.get(['reelFeed']);
+    const reelFeed = Array.isArray(stored?.reelFeed) ? stored.reelFeed : [];
+    const nextFeed = [reelData, ...reelFeed].slice(0, 50);
+
+    await chrome.storage.local.set({
+      latestReelData: reelData,
+      reelFeed: nextFeed,
+    });
+  } catch (error) {
+    console.error('Failed to cache reel data in storage', error);
+  }
+
+  try {
+    await chrome.runtime.sendMessage({
+      action: 'reelData',
+      data: reelData,
+    });
+  } catch (error) {
+    // Popup may be closed when this runs.
+    console.debug('Unable to broadcast reelData to extension contexts:', error);
+  }
+}
+
 async function processReel(reel, authContext){
   const reelMedia = reel?.node?.media;
   const shortcode = reelMedia?.code;
-
-  if (!shortcode) return;
-
   const reelData = {
-    shortcode,
+    shortcode: shortcode,
     video_duration: reelMedia.video_duration || null,
     caption: reelMedia.caption?.text || null,
-    thumbnail_url: reelMedia.image_versions2?.candidates?.[0]?.url || null,
-    ai_summary: null,
-    status: "loading",
+    thumbnail_url: reelMedia.image_versions2?.candidates?.[0]?.url || null
   }
 
-  await upsertReelData(shortcode, reelData);
+  const ai_summary = await uploadToAPIAndSummarize(reelMedia, authContext);  
 
-  try {
-    const ai_summary = await uploadToAPIAndSummarize(reelMedia, authContext);
+  reelData.ai_summary = ai_summary;
+  reelData.approved = true;
 
-    await upsertReelData(shortcode, {
-      ai_summary,
-      status: "done",
-    });
-  } catch (error) {
-    console.error("Failed to summarize reel:", error);
+  await broadcastReelData(reelData);
 
-    await upsertReelData(shortcode, {
-      ai_summary: null,
-      status: "error",
-    });
-  }
+  await sendMessageToActiveTab({
+    action: "reelData",
+    data: reelData,
+  });
+
+  console.log("Finished processing reel:", reel);
 }
 
 export async function processReelBatch(reels, authContext) {
   for (const reel of reels) {
     processReel(reel, authContext);
   }
-}
-
-async function upsertReelData(shortcode, partialData) {
-  latestReelData[shortcode] = {
-    ...(latestReelData[shortcode] || {}),
-    ...partialData,
-  };
-
-  await chrome.storage.local.set({
-    latestReelData,
-  });
 }
