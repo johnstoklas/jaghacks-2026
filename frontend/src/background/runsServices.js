@@ -7,7 +7,7 @@ export const handleCreateRun = async (items) => {
   };
   console.log("Creating run with items:", body);
   try {
-    const response = await fetch("http://localhost:8080/api/runs", {
+    const response = await fetch("http://localhost:8000/api/runs", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",

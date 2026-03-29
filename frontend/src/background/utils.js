@@ -92,7 +92,7 @@ async function uploadVideoAndGetAISummary(file) {
   for (const [key, value] of formData.entries()) {
     console.log(key, value);
   }
-  const response = await fetch('http://localhost:8080/api/upload-and-summarize-vertex', {
+  const response = await fetch('http://localhost:8000/api/upload-and-summarize-vertex', {
     method: 'POST',
     body: formData,
   });

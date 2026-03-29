@@ -1,9 +1,10 @@
 import { useEffect, useState } from "react";
 import Alert from "../component/alert";
 import { sendToBackground } from "../utils";
+import type { PopupPage } from "../types/popup";
 
 interface HomePageInterface {
-  setPage: React.Dispatch<React.SetStateAction<"home" | "scraper">>;
+  setPage: React.Dispatch<React.SetStateAction<PopupPage>>;
 }
 
 const HomePage = ({ setPage }: HomePageInterface) => {

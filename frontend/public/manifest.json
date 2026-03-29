@@ -15,7 +15,7 @@
   "host_permissions": [
     "*://*.instagram.com/*",
     "*://*.fbcdn.net/*",
-    "http://localhost:8080/*",
+    "http://localhost:8000/*",
     "https://odd-apples-cheat.loca.lt/*"
   ],
   "content_scripts": [
