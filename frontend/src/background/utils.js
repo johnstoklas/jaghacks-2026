@@ -88,7 +88,14 @@ async function uploadVideoAndGetAISummary(file) {
   const formData = new FormData();
   formData.append('video', file);
 
-  const response = await fetch('http://localhost:8080/api/upload-and-summarize', {
+  // access run from local storage and get the latest run ID
+  const stored = await chrome.storage.local.get(["latestRun"]);
+  const run_id = stored?.latestRun?.id;
+  if (!run_id) {
+    throw new Error("No active run found in local storage");
+  }
+
+  const response = await fetch(`http://localhost:8080/runs/${run_id}/upload-and-match-vertex`, {
     method: 'POST',
     body: formData,
   });

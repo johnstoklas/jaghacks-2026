@@ -18,6 +18,21 @@ export const handleCreateRun = async (items) => {
     }
 
     const data = await response.json();
+
+    try {
+      const stored = await chrome.storage.local.get(["runFeed"]);
+      const runFeed = Array.isArray(stored?.runFeed) ? stored.runFeed : [];
+      const nextFeed = [data, ...runFeed].slice(0, 50);
+
+      await chrome.storage.local.set({
+        latestRun: data,
+        runFeed: nextFeed,
+      });
+    } catch (storageError) {
+      // Keep run creation successful even if storage write fails.
+      console.error("Failed to cache run in storage:", storageError);
+    }
+
     return data;
   } catch (error) {
     console.error("Failed to send items:", error);
