@@ -23,9 +23,6 @@ export default function ScraperPage() {
   const [showUpcomingModal, setShowUpcomingModal] = useState(false);
 
   const [topics] = useState<TopicStat[]>([
-    { label: "dogs", percent: 20 },
-    { label: "cats", percent: 40 },
-    { label: "other", percent: 40 },
   ]);
 
   const [reels, setReels] = useState<ReelItem[]>([]);
@@ -41,7 +38,7 @@ export default function ScraperPage() {
   //   setUpcomingReels((prev) =>
   //     prev.map((reel) => (reel.id === id ? { ...reel, approved } : reel))
   //   );
-  // };
+  // }; 
 
   const handleStop = () => {
     chrome.runtime.sendMessage({ action: "stopRun" }, (response) => {
@@ -54,11 +51,38 @@ export default function ScraperPage() {
   };
 
   useEffect(() => {
+    console.log("Starting keyword search for");
+    const keywords = topics.map((topic) => topic.label).filter(Boolean);
+    console.log("Starting keyword search for ", keywords);
+
+    chrome.runtime.sendMessage(
+      { action: "openAndSearchKeywords", data: { keywords } },
+      (response) => {
+        if (chrome.runtime.lastError) {
+          console.error(
+            "Error triggering openAndSearchKeywords:",
+            chrome.runtime.lastError.message
+          );
+          return;
+        }
+
+        if (!response?.success) {
+          console.error(
+            "openAndSearchKeywords failed:",
+            response?.error || "Unknown error"
+          );
+        }
+      }
+    );
+  }, [topics]);
+
+  useEffect(() => {
     chrome.storage.local.get(["latestReelData"], (result) => {
       const reelsObject = result.latestReelData || {};
       setReels(Object.values(reelsObject));
     });
   }, []);
+
 
   useEffect(() => {
     const listener = (changes: any, areaName: string) => {

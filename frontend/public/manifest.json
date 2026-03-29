@@ -1,6 +1,6 @@
 {
   "manifest_version": 3,
-  "name": "My Vite React Extension",
+  "name": "ReelDaddy",
   "version": "1.0.0",
   "description": "A Chrome extension built with React and Vite.",
   "action": {

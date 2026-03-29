@@ -13,4 +13,4 @@ export default function Popup() {
       {page === "scraper" && <ScraperPage />}
     </div>
   );
-}
+} 

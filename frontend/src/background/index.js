@@ -1,5 +1,10 @@
 import { processReelBatch } from './utils.js';
-import { handleLikePost, handleScrollReel, handleOpenComments } from './actions.js';
+import {
+  handleLikePost,
+  handleScrollReel,
+  handleOpenComments,
+  handleOpenAndSearchKeywords,
+} from './actions.js';
 import { handleCreateRun } from './runsServices.js';
 
 console.log("background script loaded");
@@ -40,6 +45,12 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           if (!tabId) throw new Error("No active tab found");
 
           await handleOpenComments(tabId);
+          sendResponse({ success: true });
+          break;
+        }
+
+        case "openAndSearchKeywords": {
+          await handleOpenAndSearchKeywords(tabId, data?.keywords || []);
           sendResponse({ success: true });
           break;
         }
