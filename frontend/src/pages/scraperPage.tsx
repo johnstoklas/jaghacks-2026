@@ -41,9 +41,6 @@ export default function ScraperPage() {
 
   const [steps] = useState<RunStep[]>([
     { label: "Analyzing reel", status: "done" },
-    { label: "Liking reel", status: "done" },
-    { label: "Opening comments", status: "active" },
-    { label: "Updating algorithm", status: "pending" },
   ]);
 
   const getReelTitle = (reel: ReelData): string => {
@@ -286,24 +283,32 @@ export default function ScraperPage() {
           </h2>
 
           <div className="rounded-xl bg-gradient-to-r from-pink-50 via-orange-50 to-purple-50 border border-pink-100 p-3 mb-3">
-            <p className="text-sm font-medium text-gray-800">
-              Currently processing:
-            </p>
-            <p className="text-xs text-gray-500 mt-1 truncate" title={pageUrl || "Unknown URL"}>
-              {pageUrl || "Unknown URL"}
-            </p>
-            <p className="text-xs text-gray-500 mt-1">Next scroll in {timer}s</p>
-            <div>
-              {currentReel?.thumbnail_url && (
-                <img
-                  src={currentReel.thumbnail_url}
-                  alt="Current reel thumbnail"
-                  className="mt-2 w-full h-36 object-cover rounded-lg border border-pink-100"
-                />
-              )}
-              <p className="text-sm text-gray-600 mt-1">
-                {currentReel?.caption || currentReel?.ai_summary || "Waiting for first reel..."}
-              </p>
+            <div className="flex items-start gap-3 text-left">
+              <div className="w-24 shrink-0">
+                {currentReel?.thumbnail_url ? (
+                  <img
+                    src={currentReel.thumbnail_url}
+                    alt="Current reel thumbnail"
+                    className="w-full aspect-[9/16] object-cover rounded-lg border border-pink-100"
+                  />
+                ) : (
+                  <div className="w-full aspect-[9/16] rounded-lg border border-pink-100 bg-white/60" />
+                )}
+              </div>
+
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium text-gray-800">Currently processing:</p>
+                <p className="text-xs text-gray-500 mt-1 truncate" title={pageUrl || "Unknown URL"}>
+                  {pageUrl || "Unknown URL"}
+                </p>
+                <p className="text-sm text-gray-700 mt-1">
+                  {currentReel?.approved ? "Approved" : "Not Approved"}
+                </p>
+                <p className="text-xs text-gray-500 mt-1">Next scroll in {timer}s</p>
+                <p className="text-sm text-gray-600 mt-2 line-clamp-4">
+                  {currentReel?.caption || currentReel?.ai_summary || "Waiting for first reel..."}
+                </p>
+              </div>
             </div>
           </div>
 
